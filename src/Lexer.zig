@@ -1,7 +1,7 @@
 const std = @import("std");
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
-
+const Allocator = std.mem.Allocator;
 pub const Operator = struct {
     start: u64,
     line: u64,
@@ -55,6 +55,7 @@ pub const Keyword = struct {
 pub const Token = enum(u8) { intLiteral, floatLiteral, charLiteral, stringLiteral, identidier, keyword, sign, operator };
 
 pub const Tokenizer = struct {
+    currentIdx: u64,
     tokens: ArrayList(Token),
     Identifiers: ArrayList(Identifier),
     Keywords: ArrayList(Keyword),
@@ -91,3 +92,81 @@ pub const Sign = CharLiteral;
 pub const StringLiteral = Identifier;
 
 pub fn main() !void {}
+
+const Lexer = struct {
+    const Lexems = struct {
+        Tokens: []Token,
+        IntLiterals: []IntLiteral,
+        CharLiterals: []CharLiteral,
+        StringLiterals: []StringLiteral,
+        Identifiers: []Identifier,
+        Keywords: []Keyword,
+        Signs: []Sign,
+        Operators: []Operator,
+        LineCount: u64,
+    };
+
+    fn analyze(allocator: Allocator, src: []const u8) Lexems {
+        // const Self = @This();
+
+        var tokenizer = Tokenizer{
+            .currentIdx = 0,
+            .tokens = ArrayList(Token).init(allocator),
+            .int_literals = ArrayList(IntLiteral).init(allocator),
+            .char_literals = ArrayList(CharLiteral).init(allocator),
+            .string_literals = ArrayList(StringLiteral).init(allocator),
+            .identifiers = ArrayList(Identifier).init(allocator),
+            .keywords = ArrayList(Keyword).init(allocator),
+            .signs = ArrayList(Sign).init(allocator),
+            .operators = ArrayList(Operator).init(allocator),
+        };
+
+        const currentLineStart: u64 = 0;
+
+        while (tokenizer.currentIdx < src.len) : (tokenizer.currentIdx += 1) {
+            const c = src[tokenizer.currentIdx];
+
+            if (c == '/' and src[tokenizer.currentIdx + 1] == '/') {
+                var ch = c;
+                while (ch != '\n') {
+                    tokenizer.currentIdx += 1;
+                    ch = src[tokenizer.currentIdx];
+                }
+                tokenizer.currentIdx -= 1;
+                continue;
+            }
+            const start: u64 = tokenizer.currentIdx;
+            var end: u64 = tokenizer.currentIdx;
+            const col = @as(u32, @intCast(start - currentLineStart));
+
+            switch (c) {
+                'a'...'z', 'A'...'Z', '_' => {
+                    var char = c;
+                    while (std.ascii.isAlphabetic(char) or std.ascii.isDigit(char) or char == '_') {
+                        tokenizer.currentIdx += 1;
+                        char = src[tokenizer.currentIdx];
+                    }
+                    end = tokenizer.currentIdx;
+                    tokenizer.currentIdx -= 1;
+                    if (std.meta.stringToEnum(Keyword, src[start..end])) |kw| {
+                        tokenizer.Keywords.append(.{
+                            .value = kw,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                        tokenizer.tokens.append(.keyword) catch unreachable;
+                    } else {
+                        tokenizer.Identifiers.append(.{
+                            .value = src[start..end],
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                        tokenizer.Identifiers.append(.identidier) catch unreachable;
+                    }
+                },
+            }
+        }
+    }
+};
