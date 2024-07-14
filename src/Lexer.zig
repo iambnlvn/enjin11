@@ -2,6 +2,8 @@ const std = @import("std");
 const print = std.debug.print;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
+const panic = std.debug.panic;
+
 pub const Operator = struct {
     start: u64,
     line: u64,
@@ -165,6 +167,25 @@ const Lexer = struct {
                         }) catch unreachable;
                         tokenizer.Identifiers.append(.identidier) catch unreachable;
                     }
+                },
+                '0'...'9' => {
+                    var integer = c;
+                    while (std.ascii.isDigit(c)) {
+                        tokenizer.currentIdx += 1;
+                        integer = src[tokenizer.currentIdx];
+                    }
+                    end = tokenizer.currentIdx;
+                    tokenizer.currentIdx -= 1;
+                    const num = src[start..end];
+                    const val = std.fmt.parseUnsigned(u64, num) catch panic("Failed to parse integer", .{});
+                    tokenizer.IntLiterals.append(.{
+                        .value = val,
+                        .start = start,
+                        .end = end,
+                        .line = tokenizer.lineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.intLiteral) catch unreachable;
                 },
             }
         }
