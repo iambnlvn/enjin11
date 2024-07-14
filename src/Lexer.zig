@@ -223,6 +223,34 @@ const Lexer = struct {
                     }) catch unreachable;
                     tokenizer.tokens.append(.operator) catch unreachable;
                 },
+                '.' => {
+                    tokenizer.Operators.append(.{
+                        .value = Operator.ID.Dot,
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                },
+                ':' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[Tokenizer.currentIdx + 1] == ':') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Constant,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.tokens.append(.{
+                            .value = Operator.ID.Declaration,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
             }
         }
     }
