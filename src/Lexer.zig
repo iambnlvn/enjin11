@@ -187,6 +187,42 @@ const Lexer = struct {
                     }) catch unreachable;
                     tokenizer.tokens.append(.intLiteral) catch unreachable;
                 },
+                '(' => {
+                    tokenizer.Operators.append(.{
+                        .value = Operator.ID.LeftParen,
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                },
+                ')' => {
+                    tokenizer.Operators.append(.{
+                        .value = Operator.ID.RightParen,
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                },
+                '[' => {
+                    tokenizer.Operators.append(.{
+                        .value = Operator.ID.LeftBracket,
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                },
+                ']' => {
+                    tokenizer.Operators.append(.{
+                        .value = Operator.ID.RightBracket,
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                },
             }
         }
     }
