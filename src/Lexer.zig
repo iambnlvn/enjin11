@@ -29,6 +29,11 @@ pub const Operator = struct {
         GreaterThanEqual,
         Constant,
         Assignment,
+        MinusAssignment,
+        PlusAssignment,
+        MulAssignment,
+        DivAssignment,
+        ModAssignment,
     };
 };
 
@@ -54,10 +59,20 @@ pub const Keyword = struct {
     };
 };
 
-pub const Token = enum(u8) { intLiteral, floatLiteral, charLiteral, stringLiteral, identidier, keyword, sign, operator };
+pub const Token = enum(u8) {
+    intLiteral,
+    floatLiteral,
+    charLiteral,
+    stringLiteral,
+    identidier,
+    keyword,
+    sign,
+    operator,
+};
 
 pub const Tokenizer = struct {
     currentIdx: u64,
+    LineCount: u64,
     tokens: ArrayList(Token),
     Identifiers: ArrayList(Identifier),
     Keywords: ArrayList(Keyword),
@@ -113,6 +128,7 @@ const Lexer = struct {
 
         var tokenizer = Tokenizer{
             .currentIdx = 0,
+            .LineCount = 1,
             .tokens = ArrayList(Token).init(allocator),
             .int_literals = ArrayList(IntLiteral).init(allocator),
             .char_literals = ArrayList(CharLiteral).init(allocator),
@@ -142,6 +158,12 @@ const Lexer = struct {
             const col = @as(u32, @intCast(start - currentLineStart));
 
             switch (c) {
+                // ignore spaces, ret chars, tabs
+                '\t', ' ', '\r' => {},
+                '\n' => {
+                    tokenizer.LineCount += 1;
+                    currentLineStart = tokenizer.currentIdx + 1;
+                },
                 'a'...'z', 'A'...'Z', '_' => {
                     var char = c;
                     while (std.ascii.isAlphabetic(char) or std.ascii.isDigit(char) or char == '_') {
@@ -250,6 +272,124 @@ const Lexer = struct {
                             .column = col,
                         }) catch unreachable;
                     }
+                },
+                '+' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.PlusAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Plus,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '-' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.MinusAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Minus,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '*' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.MulAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Mul,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '/' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.DivAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Div,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '%' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.ModAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Mod,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '=' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Equal,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Assignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+
+                else => {
+                    panic("Damn, we did not implement : {c}", .{src[tokenizer.currentIdx]});
                 },
             }
         }
