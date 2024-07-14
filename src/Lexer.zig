@@ -34,6 +34,8 @@ pub const Operator = struct {
         MulAssignment,
         DivAssignment,
         ModAssignment,
+        ShiftLeft,
+        ShiftRight,
     };
 };
 
@@ -386,6 +388,69 @@ const Lexer = struct {
                             .column = col,
                         }) catch unreachable;
                     }
+                },
+
+                '<' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (Tokenizer[Tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.LessThanEqual,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else if (Tokenizer[Tokenizer.currentIdx + 1] == '<') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.ShiftLeft,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.LessThan,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '>' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.GreaterThanEqual,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else if (src[tokenizer.currentIdx + 1] == '>') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.ShiftRight,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.GreaterThan,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                ';', ',', '{', '}' => {
+                    tokenizer.Signs.append(.{
+                        .value = src[tokenizer.currentIdx],
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
                 },
 
                 else => {
