@@ -34,6 +34,13 @@ pub const Operator = struct {
         MulAssignment,
         DivAssignment,
         ModAssignment,
+        BitwiseAndAssignment,
+        BitwiseOrAssignment,
+        BitwiseXorAssignment, // TODO*: implement RightShiftAssignment, LeftShiftAssignment (Experimental and does not seem )
+        Not,
+        And,
+        Or,
+        Xor,
         ShiftLeft,
         ShiftRight,
     };
@@ -452,11 +459,96 @@ const Lexer = struct {
                         .column = col,
                     }) catch unreachable;
                 },
+                '!' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.NotEqual,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Not,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    }
+                },
+                '&' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '&') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.And,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.BitwiseAndAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        panic("Damn, we did not implement : {c}", .{src[tokenizer.currentIdx]});
+                    }
+                },
+                '|' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '|') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.Or,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else if (src[tokenizer.currentIdx + 1] == '=') {
+                        tokenizer.currentIdx += 1;
+                        tokenizer.Operators.append(.{
+                            .value = Operator.ID.BitwiseOrAssignment,
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
+                    } else {
+                        panic("Damn, we did not implement : {c}", .{src[tokenizer.currentIdx]});
+                    }
+                },
+                '^' => {
+                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.Operators.append(.{
+                        .value = Operator.ID.Xor,
+                        .start = start,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                },
 
                 else => {
                     panic("Damn, we did not implement : {c}", .{src[tokenizer.currentIdx]});
                 },
             }
         }
+        tokenizer.LineCount += 1;
+
+        return Lexems{
+            .Tokens = tokenizer.tokens.items,
+            .IntLiterals = tokenizer.int_literals.items,
+            .CharLiterals = tokenizer.char_literals.items,
+            .StringLiterals = tokenizer.string_literals.items,
+            .Identifiers = tokenizer.identifiers.items,
+            .Keywords = tokenizer.keywords.items,
+            .Signs = tokenizer.signs.items,
+            .Operators = tokenizer.operators.items,
+            .LineCount = tokenizer.LineCount,
+        };
     }
 };
