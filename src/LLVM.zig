@@ -1,0 +1,15 @@
+pub const ID = enum {
+    Undefined,
+    Module,
+    Argument,
+    BasicBlock,
+    ConstantArray,
+    ConstantStruct,
+    ConstantVector,
+    ConstantAggregateZero,
+    ConstantDataArray,
+    ConstantDataVector,
+    ConstantFP,
+    ConstantInt,
+    ConstantPointerNull,
+};
