@@ -52,7 +52,7 @@ pub const Keyword = struct {
     line: u64,
     column: u64,
 
-    const ID = enum {
+    pub const ID = enum {
         @"if",
         @"else",
         @"while",
@@ -60,9 +60,9 @@ pub const Keyword = struct {
         @"break",
         @"continue",
         @"return",
-        @"noreturn",
+        noreturn,
         @"unreachable",
-        @"void",
+        void,
         @"switch",
         @"struct",
     };
@@ -119,8 +119,8 @@ pub const StringLiteral = Identifier;
 
 pub fn main() !void {}
 
-const Lexer = struct {
-    const Lexems = struct {
+pub const Lexer = struct {
+    pub const Lexems = struct {
         Tokens: []Token,
         IntLiterals: []IntLiteral,
         CharLiterals: []CharLiteral,
@@ -139,13 +139,13 @@ const Lexer = struct {
             .currentIdx = 0,
             .LineCount = 1,
             .tokens = ArrayList(Token).init(allocator),
-            .int_literals = ArrayList(IntLiteral).init(allocator),
-            .char_literals = ArrayList(CharLiteral).init(allocator),
-            .string_literals = ArrayList(StringLiteral).init(allocator),
-            .identifiers = ArrayList(Identifier).init(allocator),
-            .keywords = ArrayList(Keyword).init(allocator),
-            .signs = ArrayList(Sign).init(allocator),
-            .operators = ArrayList(Operator).init(allocator),
+            .IntLiterals = ArrayList(IntLiteral).init(allocator),
+            .CharLiterals = ArrayList(CharLiteral).init(allocator),
+            .StringLiterals = ArrayList(StringLiteral).init(allocator),
+            .Identifiers = ArrayList(Identifier).init(allocator),
+            .Keywords = ArrayList(Keyword).init(allocator),
+            .Signs = ArrayList(Sign).init(allocator),
+            .Operators = ArrayList(Operator).init(allocator),
         };
 
         const currentLineStart: u64 = 0;
@@ -541,9 +541,9 @@ const Lexer = struct {
 
         return Lexems{
             .Tokens = tokenizer.tokens.items,
-            .IntLiterals = tokenizer.int_literals.items,
-            .CharLiterals = tokenizer.char_literals.items,
-            .StringLiterals = tokenizer.string_literals.items,
+            .IntLiterals = tokenizer.IntLiterals.items,
+            .CharLiterals = tokenizer.CharLiterals.items,
+            .StringLiterals = tokenizer.StringLiterals.items,
             .Identifiers = tokenizer.identifiers.items,
             .Keywords = tokenizer.keywords.items,
             .Signs = tokenizer.signs.items,
