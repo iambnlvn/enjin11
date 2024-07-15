@@ -36,7 +36,7 @@ pub const Operator = struct {
         ModAssignment,
         BitwiseAndAssignment,
         BitwiseOrAssignment,
-        BitwiseXorAssignment, // TODO*: implement RightShiftAssignment, LeftShiftAssignment (Experimental and does not seem )
+        BitwiseXorAssignment, // TODO*: implement RightShiftAssignment, LeftShiftAssignment (Experimental and does not seem useful)
         Not,
         And,
         Or,
@@ -60,9 +60,9 @@ pub const Keyword = struct {
         @"break",
         @"continue",
         @"return",
-        noreturn,
+        @"noreturn",
         @"unreachable",
-        void,
+        @"void",
         @"switch",
         @"struct",
     };
