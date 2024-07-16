@@ -3,6 +3,7 @@ const print = std.debug.print;
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const panic = std.debug.panic;
+const testing = std.testing;
 
 pub const Operator = struct {
     start: u64,
@@ -133,8 +134,6 @@ pub const Lexer = struct {
     };
 
     fn analyze(allocator: Allocator, src: []const u8) Lexems {
-        // const Self = @This();
-
         var tokenizer = Tokenizer{
             .currentIdx = 0,
             .LineCount = 0,
@@ -581,3 +580,23 @@ pub const Lexer = struct {
         }
     }
 };
+
+test "Lexer" {
+    const src = "struct { \n return ; \n }";
+    const allocator = std.heap.page_allocator;
+    const lexems = Lexer.analyze(allocator, src);
+    // print("LEXEMS: {any}", .{lexems});
+
+    try testing.expectEqual(lexems.LineCount, 3);
+    Lexer.printTokens(lexems);
+}
+test "Lexer string" {
+    const src = "const a = \"Hey mom\";";
+    const allocator = std.heap.page_allocator;
+    const lexems = Lexer.analyze(allocator, src);
+    try testing.expectEqual(lexems.LineCount, 1);
+    try testing.expectEqualStrings(lexems.StringLiterals[0].value, "Hey mom");
+    try testing.expectEqual(lexems.StringLiterals[0].start, 11);
+    try testing.expectEqual(lexems.StringLiterals[0].line, 0);
+    try testing.expectEqual(lexems.StringLiterals[0].column, 10);
+}
