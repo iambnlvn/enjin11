@@ -69,14 +69,14 @@ pub const Keyword = struct {
 };
 
 pub const Token = enum(u8) {
-    intLiteral,
-    floatLiteral,
-    charLiteral,
-    stringLiteral,
-    identidier,
-    keyword,
-    sign,
-    operator,
+    IntLiteral,
+    FloatLiteral,
+    CharLiteral,
+    StringLiteral,
+    Identifier,
+    Keyword,
+    Sign,
+    Operator,
 };
 
 pub const Tokenizer = struct {
@@ -181,14 +181,14 @@ pub const Lexer = struct {
                     }
                     end = tokenizer.currentIdx;
                     tokenizer.currentIdx -= 1;
-                    if (std.meta.stringToEnum(Keyword, src[start..end])) |kw| {
+                    if (std.meta.stringToEnum(Keyword.ID, src[start..end])) |kw| {
                         tokenizer.Keywords.append(.{
                             .value = kw,
                             .start = start,
                             .line = tokenizer.LineCount,
                             .column = col,
                         }) catch unreachable;
-                        tokenizer.tokens.append(.keyword) catch unreachable;
+                        tokenizer.tokens.append(.Keyword) catch unreachable;
                     } else {
                         tokenizer.Identifiers.append(.{
                             .value = src[start..end],
@@ -216,7 +216,7 @@ pub const Lexer = struct {
                         .line = tokenizer.lineCount,
                         .column = col,
                     }) catch unreachable;
-                    tokenizer.tokens.append(.intLiteral) catch unreachable;
+                    tokenizer.tokens.append(.StringLiteral) catch unreachable;
                 },
                 '(' => {
                     tokenizer.Operators.append(.{
@@ -225,7 +225,7 @@ pub const Lexer = struct {
                         .line = tokenizer.LineCount,
                         .column = col,
                     }) catch unreachable;
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                 },
                 ')' => {
                     tokenizer.Operators.append(.{
@@ -234,7 +234,7 @@ pub const Lexer = struct {
                         .line = tokenizer.LineCount,
                         .column = col,
                     }) catch unreachable;
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                 },
                 '[' => {
                     tokenizer.Operators.append(.{
@@ -243,7 +243,7 @@ pub const Lexer = struct {
                         .line = tokenizer.LineCount,
                         .column = col,
                     }) catch unreachable;
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                 },
                 ']' => {
                     tokenizer.Operators.append(.{
@@ -252,7 +252,7 @@ pub const Lexer = struct {
                         .line = tokenizer.LineCount,
                         .column = col,
                     }) catch unreachable;
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                 },
                 '.' => {
                     tokenizer.Operators.append(.{
@@ -261,11 +261,11 @@ pub const Lexer = struct {
                         .line = tokenizer.LineCount,
                         .column = col,
                     }) catch unreachable;
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                 },
                 ':' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
-                    if (src[Tokenizer.currentIdx + 1] == ':') {
+                    tokenizer.tokens.append(.Operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == ':') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
                             .value = Operator.ID.Constant,
@@ -274,7 +274,7 @@ pub const Lexer = struct {
                             .column = col,
                         }) catch unreachable;
                     } else {
-                        tokenizer.tokens.append(.{
+                        tokenizer.Operators.append(.{
                             .value = Operator.ID.Declaration,
                             .start = start,
                             .line = tokenizer.LineCount,
@@ -283,7 +283,7 @@ pub const Lexer = struct {
                     }
                 },
                 '+' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -302,7 +302,7 @@ pub const Lexer = struct {
                     }
                 },
                 '-' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -321,7 +321,7 @@ pub const Lexer = struct {
                     }
                 },
                 '*' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -340,7 +340,7 @@ pub const Lexer = struct {
                     }
                 },
                 '/' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -359,7 +359,7 @@ pub const Lexer = struct {
                     }
                 },
                 '%' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -378,7 +378,7 @@ pub const Lexer = struct {
                     }
                 },
                 '=' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -398,8 +398,8 @@ pub const Lexer = struct {
                 },
 
                 '<' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
-                    if (Tokenizer[Tokenizer.currentIdx + 1] == '=') {
+                    tokenizer.tokens.append(.Operator) catch unreachable;
+                    if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
                             .value = Operator.ID.LessThanEqual,
@@ -407,7 +407,7 @@ pub const Lexer = struct {
                             .line = tokenizer.LineCount,
                             .column = col,
                         }) catch unreachable;
-                    } else if (Tokenizer[Tokenizer.currentIdx + 1] == '<') {
+                    } else if (src[tokenizer.currentIdx + 1] == '<') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
                             .value = Operator.ID.ShiftLeft,
@@ -425,7 +425,7 @@ pub const Lexer = struct {
                     }
                 },
                 '>' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -460,7 +460,7 @@ pub const Lexer = struct {
                     }) catch unreachable;
                 },
                 '!' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '=') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -479,7 +479,7 @@ pub const Lexer = struct {
                     }
                 },
                 '&' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '&') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -501,7 +501,7 @@ pub const Lexer = struct {
                     }
                 },
                 '|' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     if (src[tokenizer.currentIdx + 1] == '|') {
                         tokenizer.currentIdx += 1;
                         tokenizer.Operators.append(.{
@@ -523,7 +523,7 @@ pub const Lexer = struct {
                     }
                 },
                 '^' => {
-                    tokenizer.tokens.append(.operator) catch unreachable;
+                    tokenizer.tokens.append(.Operator) catch unreachable;
                     tokenizer.Operators.append(.{
                         .value = Operator.ID.Xor,
                         .start = start,
@@ -544,10 +544,10 @@ pub const Lexer = struct {
             .IntLiterals = tokenizer.IntLiterals.items,
             .CharLiterals = tokenizer.CharLiterals.items,
             .StringLiterals = tokenizer.StringLiterals.items,
-            .Identifiers = tokenizer.identifiers.items,
-            .Keywords = tokenizer.keywords.items,
-            .Signs = tokenizer.signs.items,
-            .Operators = tokenizer.operators.items,
+            .Identifiers = tokenizer.Identifiers.items,
+            .Keywords = tokenizer.Keywords.items,
+            .Signs = tokenizer.Signs.items,
+            .Operators = tokenizer.Operators.items,
             .LineCount = tokenizer.LineCount,
         };
     }
