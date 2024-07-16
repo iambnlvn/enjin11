@@ -556,4 +556,9 @@ pub const Lexer = struct {
             .LineCount = tokenizer.LineCount,
         };
     }
+    pub fn printTokens(lexems: Lexems) void {
+        for (lexems.Tokens, 0..) |token, idx| {
+            print("Token: {}, AT: {d}\n", .{ token, idx });
+        }
+    }
 };
