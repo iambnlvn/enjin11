@@ -137,7 +137,7 @@ pub const Lexer = struct {
 
         var tokenizer = Tokenizer{
             .currentIdx = 0,
-            .LineCount = 1,
+            .LineCount = 0,
             .tokens = ArrayList(Token).init(allocator),
             .IntLiterals = ArrayList(IntLiteral).init(allocator),
             .CharLiterals = ArrayList(CharLiteral).init(allocator),
@@ -148,7 +148,7 @@ pub const Lexer = struct {
             .Operators = ArrayList(Operator).init(allocator),
         };
 
-        const currentLineStart: u64 = 0;
+        var currentLineStart: u64 = 0;
 
         while (tokenizer.currentIdx < src.len) : (tokenizer.currentIdx += 1) {
             const c = src[tokenizer.currentIdx];
@@ -162,7 +162,7 @@ pub const Lexer = struct {
                 tokenizer.currentIdx -= 1;
                 continue;
             }
-            const start: u64 = tokenizer.currentIdx;
+            var start: u64 = tokenizer.currentIdx;
             var end: u64 = tokenizer.currentIdx;
             const col = @as(u32, @intCast(start - currentLineStart));
 
@@ -196,7 +196,12 @@ pub const Lexer = struct {
                             .line = tokenizer.LineCount,
                             .column = col,
                         }) catch unreachable;
-                        tokenizer.Identifiers.append(.identidier) catch unreachable;
+                        tokenizer.Identifiers.append(.{
+                            .value = src[start..end],
+                            .start = start,
+                            .line = tokenizer.LineCount,
+                            .column = col,
+                        }) catch unreachable;
                     }
                 },
                 '0'...'9' => {
@@ -208,7 +213,7 @@ pub const Lexer = struct {
                     end = tokenizer.currentIdx;
                     tokenizer.currentIdx -= 1;
                     const num = src[start..end];
-                    const val = std.fmt.parseUnsigned(u64, num) catch panic("Failed to parse integer", .{});
+                    const val = std.fmt.parseUnsigned(u64, num, 10) catch panic("Failed to parse integer", .{});
                     tokenizer.IntLiterals.append(.{
                         .value = val,
                         .start = start,
