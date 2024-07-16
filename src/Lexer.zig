@@ -218,7 +218,26 @@ pub const Lexer = struct {
                         .value = val,
                         .start = start,
                         .end = end,
-                        .line = tokenizer.lineCount,
+                        .line = tokenizer.LineCount,
+                        .column = col,
+                    }) catch unreachable;
+                    tokenizer.tokens.append(.IntLiteral) catch unreachable;
+                },
+                '"' => {
+                    while (true) {
+                        tokenizer.currentIdx += 1;
+                        if (src[tokenizer.currentIdx] == '"') {
+                            break;
+                        }
+                    }
+                    end = tokenizer.currentIdx;
+                    start += 1;
+
+                    const str = src[start..end];
+                    tokenizer.StringLiterals.append(.{
+                        .value = str,
+                        .start = start,
+                        .line = tokenizer.LineCount,
                         .column = col,
                     }) catch unreachable;
                     tokenizer.tokens.append(.StringLiteral) catch unreachable;
