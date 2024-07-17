@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const panic = std.debug.panic;
 const testing = std.testing;
 
-pub const Operator = struct {
+pub const Operator = packed struct {
     start: u64,
     line: u64,
     column: u64,
@@ -100,7 +100,7 @@ pub const Identifier = struct {
     column: u64,
 };
 
-pub const IntLiteral = struct {
+pub const IntLiteral = packed struct {
     value: u64,
     start: u64,
     end: u64,
@@ -108,7 +108,7 @@ pub const IntLiteral = struct {
     column: u64,
 };
 
-pub const CharLiteral = struct {
+pub const CharLiteral = packed struct {
     value: u8,
     start: u64,
     line: u64,
