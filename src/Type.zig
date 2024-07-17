@@ -99,7 +99,10 @@ pub const Pointer = struct {
     pub fn new(idx: u64, moduleIdx: u64) Type {
         return .{ .value = (@as(u64, @intFromEnum(Type.ID.Pointer)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
     }
-    // Todo: implement a function to get the type of the pointer
+
+    fn getType(self: Type, pointerTypes: []Type.Pointer) Type {
+        return pointerTypes[@as(u32, @truncate(self.value))].type;
+    }
 };
 
 test "Integer.new initializes correctly" {
@@ -191,4 +194,11 @@ test "Pointer.new initializes correctly" {
 
     try std.testing.expectEqual(expectedValue, pointer.value);
     try std.testing.expectEqual(8, Type.Pointer.size);
+}
+
+test "Pointer.getType returns correct type" {
+    var pointerTypes = [_]Type.Pointer{.{ .type = Type.Boolean }};
+    const pointer = Type.Pointer.new(0, 0);
+
+    try std.testing.expectEqual(Type.Boolean, Type.Pointer.getType(pointer, &pointerTypes));
 }
