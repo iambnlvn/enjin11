@@ -47,6 +47,25 @@ pub const ArrayLiteral = struct {
         return id;
     }
 };
+pub const StructLiteral = struct {
+    fields: struct {
+        names: [][]const u8,
+        initilizers: []Entity,
+    },
+    type: u64, //Todo: implement a Type struct
+    fn new(list: *ArrayList(StructLiteral), fieldNames: [][]const u8, fieldExpr: []Entity, moduleIdx: u64) Entity {
+        const idx = list.items.len;
+        const id = Entity.new(idx, EntityID.Scope.StructLiterals, moduleIdx);
+        list.append(.{
+            .fields = .{
+                .names = fieldNames,
+                .initilizers = fieldExpr,
+            },
+            .type = undefined, //Todo: should be something like  std.mem.zeros(Type)
+        }) catch unreachable;
+        return id;
+    }
+};
 
 test "IntegerLiteral.new adds a new IntegerLiteral and returns correct Entity" {
     var list = ArrayList(IntegerLiteral).init(std.testing.allocator);
