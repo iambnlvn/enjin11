@@ -29,7 +29,7 @@ const Module = struct {
 };
 
 pub const Integer = struct {
-    pub const Signedness = enum {
+    const Signedness = enum {
         Signed,
         Unsigned,
         const position = Resolution.position - @bitSizeOf(Signedness);
@@ -55,7 +55,7 @@ pub const Function = struct {
     returnType: Type,
     attributes: u64,
 
-    pub const Attribute = enum(u64) {
+    const Attribute = enum(u64) {
         noreturn,
     };
 
@@ -63,7 +63,7 @@ pub const Function = struct {
         return .{ .value = (@as(u64, @intFromEnum(Type.ID.Function)) << Type.ID.position) | (module << Module.position) | idx };
     }
 
-    pub fn apprend(fnTypes: *ArrayList(Type.Function), fnType: Type.Function, moduleIdx: u64) Type {
+    pub fn append(fnTypes: *ArrayList(Type.Function), fnType: Type.Function, moduleIdx: u64) Type {
         const idx = fnTypes.items.len;
         fnTypes.append(fnType) catch unreachable;
         return new(idx, moduleIdx);
