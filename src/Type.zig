@@ -105,6 +105,25 @@ pub const Pointer = struct {
     }
 };
 
+pub fn newUnresolvedType(idx: u64, module: u64) Type {
+    return .{ .value = (@as(u64, @intFromEnum(Type.ID.Unresolved)) << Type.ID.position) | (module << Module.position) | idx };
+}
+
+pub fn isResolved(self: Type) bool {
+    return (self.value & (1 << Type.Resolution.position)) >> Type.Resolution.position != 0;
+}
+
+pub fn markResolved(self: *Type) void {
+    self.value |= 1 << Type.Resolution.position;
+}
+
+pub fn getId(self: Type) ID {
+    return @as(ID, @enumFromInt(@as(u4, @intCast((self.value & (std.math.maxInt(u4) << ID.position)) >> ID.position))));
+}
+
+pub fn getModuleIdx(self: Type) u64 {
+    return (self.value & (Module.mask << Module.position)) >> Module.position;
+}
 test "Integer.new initializes correctly" {
     const bitCount: u16 = 64;
     const signedness = Type.Integer.Signedness.Unsigned;
