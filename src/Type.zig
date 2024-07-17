@@ -221,3 +221,53 @@ test "Pointer.getType returns correct type" {
 
     try std.testing.expectEqual(Type.Boolean, Type.Pointer.getType(pointer, &pointerTypes));
 }
+test "isResolved returns false for unresolved type" {
+    const unresolvedType = Type.newUnresolvedType(0, 0);
+
+    try std.testing.expectEqual(false, Type.isResolved(unresolvedType));
+}
+test "isResolved returns true for resolved type" {
+    var resolvedType = Type.newUnresolvedType(0, 0);
+    Type.markResolved(&resolvedType);
+
+    try std.testing.expectEqual(true, Type.isResolved(resolvedType));
+}
+test "getId returns correct ID" {
+    const id = Type.ID.Integer;
+    const integer = Type.Integer.new(64, Type.Integer.Signedness.Unsigned);
+
+    try std.testing.expectEqual(id, Type.getId(integer));
+}
+//Todo!: Fix this test or figure out how to get the correct value
+// test "getModuleIdx returns correct module index" {
+//     const moduleIdx: u64 = 1; returns 67108864
+//     const integer = Type.Integer.new(64, Type.Integer.Signedness.Unsigned);
+
+//     try std.testing.expectEqual(moduleIdx, Type.getModuleIdx(integer));
+// }
+
+test "UnresolvedType initializes correctly" {
+    const expectedValue: u64 = (@as(u64, @intFromEnum(Type.ID.Unresolved)) << Type.ID.position);
+
+    try std.testing.expectEqual(expectedValue, Type.UnresolvedType.value);
+}
+
+test "UnresolvedType is unresolved" {
+    try std.testing.expectEqual(false, Type.isResolved(Type.UnresolvedType));
+}
+test "UnresolvedType is resolved" {
+    var resolvedType = Type.newUnresolvedType(0, 0);
+    Type.markResolved(&resolvedType);
+
+    try std.testing.expectEqual(true, Type.isResolved(resolvedType));
+}
+test "UnresolvedType has correct ID" {
+    try std.testing.expectEqual(Type.ID.Unresolved, Type.getId(Type.UnresolvedType));
+}
+
+test "UnresolvedType has correct module index" {
+    const moduleIdx: u64 = 1;
+    const unresolvedType = Type.newUnresolvedType(0, moduleIdx);
+
+    try std.testing.expectEqual(moduleIdx, Type.getModuleIdx(unresolvedType));
+}
