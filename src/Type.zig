@@ -49,6 +49,7 @@ pub const Integer = struct {
 };
 
 pub const Boolean = Integer.new(1, .Unsigned);
+
 pub const Function = struct {
     argTypes: []Type,
     returnType: Type,
@@ -59,12 +60,21 @@ pub const Function = struct {
     };
 
     pub fn new(idx: u64, module: u64) Type {
-        return .{ .value = (@as(u64, @intFromEnum(Type.ID.function)) << Type.ID.position) | (module << Module.position) | idx };
+        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Function)) << Type.ID.position) | (module << Module.position) | idx };
     }
 
     pub fn apprend(fnTypes: *ArrayList(Type.Function), fnType: Type.Function, moduleIdx: u64) Type {
         const idx = fnTypes.items.len;
         fnTypes.append(fnType) catch unreachable;
         return new(idx, moduleIdx);
+    }
+};
+
+pub const Array = struct {
+    exprLen: u64,
+    type: Type,
+
+    fn new(idx: u64, moduleIdx: u64) Type {
+        return .{ .value = (@as(u64, @intFromEnum(Type.ID.array)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
     }
 };
