@@ -34,6 +34,19 @@ pub const IntegerLiteral = struct {
         return id;
     }
 };
+pub const ArrayLiteral = struct {
+    elements: []Entity,
+    type: u64, //Todo: implement a Type struct
+    fn new(list: *ArrayList(ArrayLiteral), elements: []Entity, moduleIdx: u64) Entity {
+        const idx = list.items.len;
+        const id = Entity.new(idx, EntityID.Scope.ArrayLiterals, moduleIdx);
+        list.append(.{
+            .elements = elements,
+            .type = undefined,
+        }) catch unreachable;
+        return id;
+    }
+};
 
 test "IntegerLiteral.new adds a new IntegerLiteral and returns correct Entity" {
     var list = ArrayList(IntegerLiteral).init(std.testing.allocator);
