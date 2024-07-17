@@ -1,7 +1,8 @@
 const std = @import("std");
-
+const ArrayList = std.ArrayList;
 const Type = @This();
 value: u64,
+
 pub const UnresolvedType = Type{ .value = 0 };
 
 pub const ID = enum(u4) {
@@ -27,7 +28,7 @@ const Module = struct {
     const mask = std.math.maxInt(std.meta.Int(.unsigned, bitCount));
 };
 
-const Integer = struct {
+pub const Integer = struct {
     pub const Signedness = enum {
         Signed,
         Unsigned,
@@ -38,5 +39,32 @@ const Integer = struct {
         {
             return .{ .value = (@as(u64, @intFromEnum(Type.ID.integer)) << Type.ID.position) | (@as(u64, @intFromEnum(signedness)) << Signedness.position) | bitCount };
         }
+    }
+    pub fn getBitCount(T: Type) u16 {
+        return @as(u16, @truncate(T.value));
+    }
+    pub fn getSignedness(T: Type) Signedness {
+        return @as(Signedness, @enumFromInt(@as(u1, @intCast((T.value & (1 << Signedness.position)) >> Signedness.position))));
+    }
+};
+
+pub const Boolean = Integer.new(1, .Unsigned);
+pub const Function = struct {
+    argTypes: []Type,
+    returnType: Type,
+    attributes: u64,
+
+    pub const Attribute = enum(u64) {
+        noreturn,
+    };
+
+    pub fn new(idx: u64, module: u64) Type {
+        return .{ .value = (@as(u64, @intFromEnum(Type.ID.function)) << Type.ID.position) | (module << Module.position) | idx };
+    }
+
+    pub fn apprend(fnTypes: *ArrayList(Type.Function), fnType: Type.Function, moduleIdx: u64) Type {
+        const idx = fnTypes.items.len;
+        fnTypes.append(fnType) catch unreachable;
+        return new(idx, moduleIdx);
     }
 };
