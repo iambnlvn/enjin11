@@ -37,7 +37,7 @@ pub const Integer = struct {
 
     pub fn new(bitCount: u16, signedness: Signedness) Type {
         {
-            return .{ .value = (@as(u64, @intFromEnum(Type.ID.integer)) << Type.ID.position) | (@as(u64, @intFromEnum(signedness)) << Signedness.position) | bitCount };
+            return .{ .value = (@as(u64, @intFromEnum(Type.ID.Integer)) << Type.ID.position) | (@as(u64, @intFromEnum(signedness)) << Signedness.position) | bitCount };
         }
     }
     pub fn getBitCount(T: Type) u16 {
@@ -75,6 +75,29 @@ pub const Array = struct {
     type: Type,
 
     fn new(idx: u64, moduleIdx: u64) Type {
-        return .{ .value = (@as(u64, @intFromEnum(Type.ID.array)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Array)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
     }
+};
+
+pub const Slice = struct {
+    type: Type,
+};
+
+pub const Struct = struct {
+    types: []Type,
+    names: [][]const u8,
+    name: []const u8,
+    alignement: u64,
+
+    pub fn new(idx: u64, moduleIdx: u64) Type {
+        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Structure)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+    }
+};
+pub const Pointer = struct {
+    type: Type,
+    const size = 8;
+    pub fn new(idx: u64, moduleIdx: u64) Type {
+        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Pointer)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+    }
+    // Todo: implement a function to get the type of the pointer
 };
