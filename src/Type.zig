@@ -32,9 +32,9 @@ pub const Integer = struct {
     const Signedness = enum {
         Signed,
         Unsigned,
-        const position = Resolution.position - @bitSizeOf(Signedness);
+        const position = Resolution.position - SignednessBitSize;
     };
-
+    const SignednessBitSize = @bitSizeOf(Signedness);
     pub fn new(bitCount: u16, signedness: Signedness) Type {
         {
             return .{ .value = (@as(u64, @intFromEnum(Type.ID.Integer)) << Type.ID.position) | (@as(u64, @intFromEnum(signedness)) << Signedness.position) | bitCount };
@@ -43,8 +43,14 @@ pub const Integer = struct {
     pub fn getBitCount(T: Type) u16 {
         return @as(u16, @truncate(T.value));
     }
+    // this implementation is less accurate than the one below for extracting the signedness info
+    // esp if the Signedness enum could occupy more than 1 bit (the new implementation accounts for the bit size of Signedness)
+    // pub fn getSignedness(T: Type) Signedness {
+    //     return @as(Signedness, @enumFromInt(@as(u1, @intCast((T.value & (1 << Signedness.position)) >> Signedness.position))));
+    // }
+
     pub fn getSignedness(T: Type) Signedness {
-        return @as(Signedness, @enumFromInt(@as(u1, @intCast((T.value & (1 << Signedness.position)) >> Signedness.position))));
+        return @as(Signedness, @enumFromInt(@as(u64, (T.value >> Signedness.position) & ((1 << SignednessBitSize) - 1))));
     }
 };
 
@@ -140,7 +146,8 @@ test "Integer.getBitCount returns correct value" {
 
     try std.testing.expectEqual(bitCount, Type.Integer.getBitCount(integer));
 }
-test "Integer.getSignedness returns correct value" {
+
+test "Integer.getSignedness2 returns correct value" {
     const bitCount: u16 = 64;
     const signedness = Type.Integer.Signedness.Unsigned;
     const integer = Type.Integer.new(bitCount, signedness);
