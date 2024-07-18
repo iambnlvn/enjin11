@@ -7,6 +7,7 @@ const Lexem = Lexer.Lexer.Lexems;
 const ArrayList = std.ArrayList;
 const Entity = @import("Entity.zig").Entity;
 const EntityID = @import("EntityID.zig").ID;
+const expectEqual = std.testing.expectEqual;
 
 const Precedence = enum {
     None,
@@ -78,9 +79,9 @@ test "IntegerLiteral.new adds a new IntegerLiteral and returns correct Entity" {
     const entity = IntegerLiteral.new(&list, value, isSigned, moduleIdx);
     _ = entity;
 
-    try std.testing.expectEqual(list.items.len, 1);
-    try std.testing.expectEqual(list.items[0].value, value);
-    try std.testing.expectEqual(list.items[0].isSigned, isSigned);
+    try expectEqual(list.items.len, 1);
+    try expectEqual(list.items[0].value, value);
+    try expectEqual(list.items[0].isSigned, isSigned);
 }
 test "IntegerLiteral.new adds multiple IntegerLiterals and returns correct Entities" {
     var list = ArrayList(IntegerLiteral).init(std.testing.allocator);
@@ -100,9 +101,9 @@ test "IntegerLiteral.new adds multiple IntegerLiterals and returns correct Entit
     const entity2 = IntegerLiteral.new(&list, value2, isSigned2, moduleIdx2);
     _ = entity2;
 
-    try std.testing.expectEqual(list.items.len, 2);
-    try std.testing.expectEqual(list.items[0].value, value1);
-    try std.testing.expectEqual(list.items[0].isSigned, isSigned1);
-    try std.testing.expectEqual(list.items[1].value, value2);
-    try std.testing.expectEqual(list.items[1].isSigned, isSigned2);
+    try expectEqual(list.items.len, 2);
+    try expectEqual(list.items[0].value, value1);
+    try expectEqual(list.items[0].isSigned, isSigned1);
+    try expectEqual(list.items[1].value, value2);
+    try expectEqual(list.items[1].isSigned, isSigned2);
 }

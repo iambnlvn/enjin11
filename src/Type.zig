@@ -1,4 +1,5 @@
 const std = @import("std");
+const expectEqual = std.testing.expectEqual;
 const ArrayList = std.ArrayList;
 const Type = @This();
 value: u64,
@@ -142,14 +143,14 @@ test "Integer.new initializes correctly" {
 
     const integer = Type.Integer.new(bitCount, signedness);
 
-    try std.testing.expectEqual(expectedValue, integer.value);
+    try expectEqual(expectedValue, integer.value);
 }
 test "Integer.getBitCount returns correct value" {
     const bitCount: u16 = 64;
     const signedness = Type.Integer.Signedness.Unsigned;
     const integer = Type.Integer.new(bitCount, signedness);
 
-    try std.testing.expectEqual(bitCount, Type.Integer.getBitCount(integer));
+    try expectEqual(bitCount, Type.Integer.getBitCount(integer));
 }
 
 test "Integer.getSignedness2 returns correct value" {
@@ -157,19 +158,19 @@ test "Integer.getSignedness2 returns correct value" {
     const signedness = Type.Integer.Signedness.Unsigned;
     const integer = Type.Integer.new(bitCount, signedness);
 
-    try std.testing.expectEqual(signedness, Type.Integer.getSignedness(integer));
+    try expectEqual(signedness, Type.Integer.getSignedness(integer));
 }
 
 test "Boolean initializes correctly" {
     const expectedValue: u64 = (@as(u64, @intFromEnum(Type.ID.Integer)) << Type.ID.position) | (1 << Type.Integer.Signedness.position) | 1;
 
-    try std.testing.expectEqual(expectedValue, Type.Boolean.value);
+    try expectEqual(expectedValue, Type.Boolean.value);
 }
 test "Boolean is unsigned" {
-    try std.testing.expectEqual(Type.Integer.Signedness.Unsigned, Type.Integer.getSignedness(Type.Boolean));
+    try expectEqual(Type.Integer.Signedness.Unsigned, Type.Integer.getSignedness(Type.Boolean));
 }
 test "Boolean is 1 bit" {
-    try std.testing.expectEqual(1, Type.Integer.getBitCount(Type.Boolean));
+    try expectEqual(1, Type.Integer.getBitCount(Type.Boolean));
 }
 //Todo!: Fix this test
 // test "Function.new initializes correctly" {
@@ -179,7 +180,7 @@ test "Boolean is 1 bit" {
 
 //     const function = Type.Function.new(idx, moduleIdx);
 
-//     try std.testing.expectEqual(expectedValue, function.value);
+//     try expectEqual(expectedValue, function.value);
 // }
 // test "Function.append appends correctly" {
 //     var fnTypes = ArrayList(Type.Function).init(std.testing.allocator);
@@ -192,8 +193,8 @@ test "Boolean is 1 bit" {
 //     const function = Type.Function.new(idx, moduleIdx);
 //     const appendedFunction = Type.Function.append(&fnTypes, function, moduleIdx);
 
-//     try std.testing.expectEqual(expectedValue, appendedFunction.value);
-//     try std.testing.expectEqual(1, fnTypes.items.len);
+//     try expectEqual(expectedValue, appendedFunction.value);
+//     try expectEqual(1, fnTypes.items.len);
 // }
 
 test "Array.new initializes correctly" {
@@ -203,7 +204,7 @@ test "Array.new initializes correctly" {
 
     const array = Type.Array.new(idx, moduleIdx);
 
-    try std.testing.expectEqual(expectedValue, array.value);
+    try expectEqual(expectedValue, array.value);
 }
 
 test "Struct.new initializes correctly" {
@@ -213,7 +214,7 @@ test "Struct.new initializes correctly" {
 
     const s = Type.Struct.new(idx, moduleIdx);
 
-    try std.testing.expectEqual(expectedValue, s.value);
+    try expectEqual(expectedValue, s.value);
 }
 
 test "Pointer.new initializes correctly" {
@@ -223,63 +224,63 @@ test "Pointer.new initializes correctly" {
 
     const pointer = Type.Pointer.new(idx, moduleIdx);
 
-    try std.testing.expectEqual(expectedValue, pointer.value);
-    try std.testing.expectEqual(8, Type.Pointer.size);
+    try expectEqual(expectedValue, pointer.value);
+    try expectEqual(8, Type.Pointer.size);
 }
 
 test "Pointer.getType returns correct type" {
     var pointerTypes = [_]Type.Pointer{.{ .type = Type.Boolean }};
     const pointer = Type.Pointer.new(0, 0);
 
-    try std.testing.expectEqual(Type.Boolean, Type.Pointer.getType(pointer, &pointerTypes));
+    try expectEqual(Type.Boolean, Type.Pointer.getType(pointer, &pointerTypes));
 }
 test "isResolved returns false for unresolved type" {
     const unresolvedType = Type.newUnresolvedType(0, 0);
 
-    try std.testing.expectEqual(false, Type.isResolved(unresolvedType));
+    try expectEqual(false, Type.isResolved(unresolvedType));
 }
 test "isResolved returns true for resolved type" {
     var resolvedType = Type.newUnresolvedType(0, 0);
     Type.markResolved(&resolvedType);
 
-    try std.testing.expectEqual(true, Type.isResolved(resolvedType));
+    try expectEqual(true, Type.isResolved(resolvedType));
 }
 test "getId returns correct ID" {
     const id = Type.ID.Integer;
     const integer = Type.Integer.new(64, Type.Integer.Signedness.Unsigned);
 
-    try std.testing.expectEqual(id, Type.getId(integer));
+    try expectEqual(id, Type.getId(integer));
 }
 //Todo!: Fix this test or figure out how to get the correct value
 // test "getModuleIdx returns correct module index" {
 //     const moduleIdx: u64 = 1; returns 67108864
 //     const integer = Type.Integer.new(64, Type.Integer.Signedness.Unsigned);
 
-//     try std.testing.expectEqual(moduleIdx, Type.getModuleIdx(integer));
+//     try expectEqual(moduleIdx, Type.getModuleIdx(integer));
 // }
 
 test "UnresolvedType initializes correctly" {
     const expectedValue: u64 = (@as(u64, @intFromEnum(Type.ID.Unresolved)) << Type.ID.position);
 
-    try std.testing.expectEqual(expectedValue, Type.UnresolvedType.value);
+    try expectEqual(expectedValue, Type.UnresolvedType.value);
 }
 
 test "UnresolvedType is unresolved" {
-    try std.testing.expectEqual(false, Type.isResolved(Type.UnresolvedType));
+    try expectEqual(false, Type.isResolved(Type.UnresolvedType));
 }
 test "UnresolvedType is resolved" {
     var resolvedType = Type.newUnresolvedType(0, 0);
     Type.markResolved(&resolvedType);
 
-    try std.testing.expectEqual(true, Type.isResolved(resolvedType));
+    try expectEqual(true, Type.isResolved(resolvedType));
 }
 test "UnresolvedType has correct ID" {
-    try std.testing.expectEqual(Type.ID.Unresolved, Type.getId(Type.UnresolvedType));
+    try expectEqual(Type.ID.Unresolved, Type.getId(Type.UnresolvedType));
 }
 
 test "UnresolvedType has correct module index" {
     const moduleIdx: u64 = 1;
     const unresolvedType = Type.newUnresolvedType(0, moduleIdx);
 
-    try std.testing.expectEqual(moduleIdx, Type.getModuleIdx(unresolvedType));
+    try expectEqual(moduleIdx, Type.getModuleIdx(unresolvedType));
 }
