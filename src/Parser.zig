@@ -88,9 +88,22 @@ pub const Function = struct {
 pub const Scope = struct {
     statements: []Entity,
     VarDeclaration: []VarDeclaration,
+    Assignment: []Assignment,
+    CompoundAssignment: []CompoundAssignment,
+    Comparison: []Comparison,
+    BreakExpr: []BreakExpr,
+    ReturnExpr: []ReturnExpr,
+    InvokeExpr: []InvokeExpr,
     const Builder = struct {
         Statements: ArrayList(Entity),
-        VarDeclaration: ArrayList(VarDeclaration),
+        VarDeclarations: ArrayList(VarDeclaration),
+        Assignments: ArrayList(Assignment),
+        CompoundAssignments: ArrayList(CompoundAssignment),
+        Comparisons: ArrayList(Comparison),
+        BreakExprs: ArrayList(BreakExpr),
+        ReturnExprs: ArrayList(ReturnExpr),
+        InvokeExprs: ArrayList(InvokeExpr),
+        ArithmeticExprs: ArrayList(ArithmeticExpr),
     };
 };
 
@@ -102,7 +115,7 @@ const VarDeclaration = struct {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const varDeclarationIdx = currentScope.VarDeclaration.items.len;
-        currentScope.VarDeclaration.append(.{
+        currentScope.VarDeclarations.append(.{
             .name = name,
             .type = varType,
         }) catch unreachable;
@@ -113,6 +126,104 @@ const VarDeclaration = struct {
         return varDeclarationId;
     }
 };
+pub const ReturnExpr = struct {
+    expr: ?Entity,
+};
+
+pub const BreakExpr = struct {
+    loop2Break: EntityID,
+};
+
+pub const ArithmeticExpr = struct {
+    left: Entity,
+    right: Entity,
+    id: ID,
+    const ID = enum(u8) {
+        Add,
+        Sub,
+        Mul,
+        Div,
+    };
+};
+
+pub const InvokeExpr = struct {
+    args: []Entity,
+    expr: Entity,
+    fn new(fnBuilder: *Function.Builder, expr: Entity, args: []Entity) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+        const idx = currentScope.Statements.items.len;
+        const invokeExpr = Entity.new(idx, Scopes.InvokeExpr, fnBuilder.currentScope);
+        currentScope.InvokeExprs.append(.{
+            .args = args,
+            .expr = expr,
+        }) catch unreachable;
+
+        return invokeExpr;
+    }
+};
+pub const Assignment = struct {
+    left: Entity,
+    right: Entity,
+    fn new(fnBuilder: *Function.Builder, left: Entity, right: Entity) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+        const idx = currentScope.Statements.items.len;
+
+        const assignment = Entity.new(idx, Scopes.Assignment, fnBuilder.currentScope);
+        currentScope.Assignments.append(.{
+            .left = left,
+            .right = right,
+        }) catch unreachable;
+
+        return assignment;
+    }
+};
+
+pub const CompoundAssignment = struct {
+    left: Entity,
+    right: Entity,
+    id: EntityID,
+
+    fn new(fnBuilder: *Function.Builder, id: EntityID, left: Entity, right: Entity) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+        const idx = currentScope.Statements.items.len;
+        currentScope.CompoundAssignments.append(.{
+            .left = left,
+            .right = right,
+            .id = id,
+        }) catch unreachable;
+
+        return Entity.new(idx, Scopes.CompoundAssignment, fnBuilder.currentScope);
+    }
+};
+
+pub const Comparison = struct {
+    left: Entity,
+    right: Entity,
+    id: ID,
+    const ID = enum(u8) {
+        Equal,
+        NotEqual,
+        LessThan,
+        GreaterThan,
+        LessThanOrEqual,
+        GreaterThanOrEqual,
+    };
+    fn new(fnBuilder: *Function.Builder, id: ID, left: Entity, right: Entity) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+        const idx = currentScope.Comparisons.items.len;
+        const comparisonId = Entity.new(idx, Scopes.Comparison, fnBuilder.currentScope);
+        currentScope.Comparisons.append(.{
+            .left = left,
+            .right = right,
+            .id = id,
+        }) catch unreachable;
+        return comparisonId;
+    }
+};
+
 test "IntegerLiteral.new adds a new IntegerLiteral and returns correct Entity" {
     var list = ArrayList(IntegerLiteral).init(std.testing.allocator);
     defer list.deinit();
