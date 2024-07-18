@@ -65,8 +65,8 @@ pub const Function = struct {
         noreturn,
     };
 
-    pub fn new(idx: u64, module: u64) Type {
-        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Function)) << Type.ID.position) | (module << Module.position) | idx };
+    pub fn new(idx: u64, moduleIdx: u64) Type {
+        return constructTypeValue(Type.ID.Function, moduleIdx, idx);
     }
 
     pub fn append(fnTypes: *ArrayList(Type.Function), fnType: Type.Function, moduleIdx: u64) Type {
@@ -81,7 +81,7 @@ pub const Array = struct {
     type: Type,
 
     fn new(idx: u64, moduleIdx: u64) Type {
-        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Array)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+        return constructTypeValue(Type.ID.Array, moduleIdx, idx);
     }
 };
 
@@ -93,17 +93,18 @@ pub const Struct = struct {
     types: []Type,
     names: [][]const u8,
     name: []const u8,
-    alignement: u64,
+    alignment: u64,
 
     pub fn new(idx: u64, moduleIdx: u64) Type {
-        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Structure)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+        return constructTypeValue(Type.ID.Structure, moduleIdx, idx);
     }
 };
+
 pub const Pointer = struct {
     type: Type,
     const size = 8;
     pub fn new(idx: u64, moduleIdx: u64) Type {
-        return .{ .value = (@as(u64, @intFromEnum(Type.ID.Pointer)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+        return constructTypeValue(Type.ID.Pointer, moduleIdx, idx);
     }
 
     fn getType(self: Type, pointerTypes: []Type.Pointer) Type {
@@ -111,8 +112,11 @@ pub const Pointer = struct {
     }
 };
 
-pub fn newUnresolvedType(idx: u64, module: u64) Type {
-    return .{ .value = (@as(u64, @intFromEnum(Type.ID.Unresolved)) << Type.ID.position) | (module << Module.position) | idx };
+fn constructTypeValue(id: Type.ID, moduleIdx: u64, idx: u64) Type {
+    return .{ .value = (@as(u64, @intFromEnum(id)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
+}
+pub fn newUnresolvedType(idx: u64, moduleIdx: u64) Type {
+    return constructTypeValue(Type.ID.Pointer, moduleIdx, idx);
 }
 
 pub fn isResolved(self: Type) bool {
@@ -130,6 +134,7 @@ pub fn getId(self: Type) ID {
 pub fn getModuleIdx(self: Type) u64 {
     return (self.value & (Module.mask << Module.position)) >> Module.position;
 }
+
 test "Integer.new initializes correctly" {
     const bitCount: u16 = 64;
     const signedness = Type.Integer.Signedness.Unsigned;
