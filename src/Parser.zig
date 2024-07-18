@@ -50,6 +50,41 @@ pub const ArrayLiteral = struct {
         return id;
     }
 };
+pub const ArraySubExpr = struct {
+    expr: Entity,
+    idx: Entity,
+    fn new(fnBuilder: *Function.Builder, arrayExpr: Entity, arrayIdxExpr: Entity) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+        const idx = currentScope.ArraySubExprs.items.len;
+
+        currentScope.ArraySubExprs.append(.{
+            .expr = arrayExpr,
+            .idx = arrayIdxExpr,
+        }) catch unreachable;
+        return Entity.new(idx, Scopes.ArraySubscriptExpr, fnBuilder.currentScope);
+    }
+};
+pub const FieldAccessExpr = struct {
+    leftExpr: Entity,
+    fieldExpr: Entity,
+    type: Type,
+
+    fn new(fnBuilder: *Function.Builder, leftExpr: Entity, fieldExpr: Entity) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+        const idx = currentScope.FieldAccessExpr.items.len;
+
+        currentScope.FieldAccessExpr.append(.{
+            .leftExpr = leftExpr,
+            .fieldExpr = fieldExpr,
+            .type = Type.UnresolvedType,
+        }) catch unreachable;
+        return Entity.new(idx, Scopes.FieldAccessExpr, fnBuilder.currentScope);
+    }
+};
+// TODO: new function is repetitive, refactor to use a factory function
+
 pub const StructLiteral = struct {
     fields: struct {
         names: [][]const u8,
@@ -94,6 +129,8 @@ pub const Scope = struct {
     BreakExpr: []BreakExpr,
     ReturnExpr: []ReturnExpr,
     InvokeExpr: []InvokeExpr,
+    ArraySubExpr: []ArraySubExpr,
+    FieldAccessExpr: []FieldAccessExpr,
     const Builder = struct {
         Statements: ArrayList(Entity),
         VarDeclarations: ArrayList(VarDeclaration),
@@ -104,6 +141,8 @@ pub const Scope = struct {
         ReturnExprs: ArrayList(ReturnExpr),
         InvokeExprs: ArrayList(InvokeExpr),
         ArithmeticExprs: ArrayList(ArithmeticExpr),
+        ArraySubExprs: ArrayList(ArraySubExpr),
+        FieldAccessExpr: ArrayList(FieldAccessExpr),
     };
 };
 
