@@ -8,6 +8,8 @@ const ArrayList = std.ArrayList;
 const Entity = @import("Entity.zig").Entity;
 const EntityID = @import("EntityID.zig").ID;
 const expectEqual = std.testing.expectEqual;
+const Type = @import("Type.zig");
+const Scopes = EntityID.Scope;
 
 const Precedence = enum {
     None,
@@ -37,7 +39,7 @@ pub const IntegerLiteral = struct {
 };
 pub const ArrayLiteral = struct {
     elements: []Entity,
-    type: u64, //Todo: implement a Type struct
+    type: Type,
     fn new(list: *ArrayList(ArrayLiteral), elements: []Entity, moduleIdx: u64) Entity {
         const idx = list.items.len;
         const id = Entity.new(idx, EntityID.Scope.ArrayLiterals, moduleIdx);
@@ -53,7 +55,7 @@ pub const StructLiteral = struct {
         names: [][]const u8,
         initilizers: []Entity,
     },
-    type: u64, //Todo: implement a Type struct
+    type: Type,
     fn new(list: *ArrayList(StructLiteral), fieldNames: [][]const u8, fieldExpr: []Entity, moduleIdx: u64) Entity {
         const idx = list.items.len;
         const id = Entity.new(idx, EntityID.Scope.StructLiterals, moduleIdx);
@@ -62,12 +64,55 @@ pub const StructLiteral = struct {
                 .names = fieldNames,
                 .initilizers = fieldExpr,
             },
-            .type = undefined, //Todo: should be something like  std.mem.zeros(Type)
+            .type = std.mem.zeros(Type),
         }) catch unreachable;
         return id;
     }
 };
 
+pub const Function = struct {
+    name: []const u8,
+    argNames: [][]const u8,
+    type: Type.Function,
+
+    const Internal = struct {
+        declaration: Function,
+        scopes: []Scope,
+    };
+    const Builder = struct {
+        scopeBuilders: ArrayList(Scope.Builder),
+        scopes: ArrayList(Scope),
+        currentScope: usize,
+    };
+};
+pub const Scope = struct {
+    statements: []Entity,
+    VarDeclaration: []VarDeclaration,
+    const Builder = struct {
+        Statements: ArrayList(Entity),
+        VarDeclaration: ArrayList(VarDeclaration),
+    };
+};
+
+const VarDeclaration = struct {
+    name: []const u8,
+    type: Type,
+
+    fn new(fnBuilder: *Function.Builder, name: []const u8, varType: Type) Entity {
+        const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+        const varDeclarationIdx = currentScope.VarDeclaration.items.len;
+        currentScope.VarDeclaration.append(.{
+            .name = name,
+            .type = varType,
+        }) catch unreachable;
+
+        const varDeclarationId = Entity.new(varDeclarationIdx, Scopes.VarDeclaration, fnBuilder.currentScope);
+        currentScope.Statements.append(varDeclarationId) catch unreachable;
+
+        return varDeclarationId;
+    }
+};
 test "IntegerLiteral.new adds a new IntegerLiteral and returns correct Entity" {
     var list = ArrayList(IntegerLiteral).init(std.testing.allocator);
     defer list.deinit();
