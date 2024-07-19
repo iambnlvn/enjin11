@@ -10,7 +10,7 @@ const EntityID = @import("EntityID.zig").ID;
 const expectEqual = std.testing.expectEqual;
 const Type = @import("Type.zig");
 const Scopes = EntityID.Scope;
-
+const Allocator = std.mem.Allocator;
 const Precedence = enum {
     None,
     Assignment,
@@ -143,6 +143,30 @@ pub const Scope = struct {
         ArithmeticExprs: ArrayList(ArithmeticExpr),
         ArraySubExprs: ArrayList(ArraySubExpr),
         FieldAccessExpr: ArrayList(FieldAccessExpr),
+        LastLoop: Entity,
+
+        //Todo: refactor this to encapsulate the initialization logic
+        fn new(allocator: *Allocator, builder: *Function.Builder) u32 {
+            const last = if (builder.scopeBuilders.items.len == 0) std.mem.zeroes(Entity) else builder.scopeBuilders.items[builder.currentScope].LastLoop;
+
+            builder.currentScope = @as(u32, @intCast(builder.scopeBuilders.items.len));
+            builder.scopes.append(undefined) catch unreachable;
+            builder.scopeBuilders.append(Scope.Builder{
+                .Statements = ArrayList(Entity).init(allocator),
+                .VarDeclarations = ArrayList(VarDeclaration).init(allocator),
+                .Assignments = ArrayList(Assignment).init(allocator),
+                .CompoundAssignments = ArrayList(CompoundAssignment).init(allocator),
+                .Comparisons = ArrayList(Comparison).init(allocator),
+                .BreakExprs = ArrayList(BreakExpr).init(allocator),
+                .ReturnExprs = ArrayList(ReturnExpr).init(allocator),
+                .InvokeExprs = ArrayList(InvokeExpr).init(allocator),
+                .ArithmeticExprs = ArrayList(ArithmeticExpr).init(allocator),
+                .ArraySubExprs = ArrayList(ArraySubExpr).init(allocator),
+                .FieldAccessExpr = ArrayList(FieldAccessExpr).init(allocator),
+                .LastLoop = last,
+            }) catch unreachable;
+            return builder.currentScope;
+        }
     };
 };
 
