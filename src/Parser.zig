@@ -117,7 +117,7 @@ pub const Function = struct {
     const Builder = struct {
         scopeBuilders: ArrayList(Scope.Builder),
         scopes: ArrayList(Scope),
-        currentScope: usize,
+        currentScope: u32,
     };
 };
 pub const Scope = struct {
@@ -285,6 +285,25 @@ pub const Comparison = struct {
         }) catch unreachable;
         return comparisonId;
     }
+};
+pub const Lib = struct {
+    symbolNames: [][]const u8,
+
+    const Builder = struct {
+        symbolNames: ArrayList([]const u8),
+    };
+};
+
+pub const TokenTypeMap = blk: {
+    var ttm: [std.enums.values(Lexer.Token).len]type = undefined;
+    ttm[@intFromEnum(Token.IntLiteral)] = Lexer.IntLiteral;
+    ttm[@intFromEnum(Token.CharLiteral)] = Lexer.CharLiteral;
+    ttm[@intFromEnum(Token.StringLiteral)] = Lexer.StringLiteral;
+    ttm[@intFromEnum(Token.Identifier)] = Lexer.Identifier;
+    ttm[@intFromEnum(Token.Operator)] = Lexer.Operator;
+    ttm[@intFromEnum(Token.Keyword)] = Lexer.Keyword;
+    ttm[@intFromEnum(Token.Sign)] = Lexer.Sign;
+    break :blk ttm;
 };
 
 test "IntegerLiteral.new adds a new IntegerLiteral and returns correct Entity" {
