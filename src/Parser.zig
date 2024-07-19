@@ -11,6 +11,8 @@ const expectEqual = std.testing.expectEqual;
 const Type = @import("Type.zig");
 const Scopes = EntityID.Scope;
 const Allocator = std.mem.Allocator;
+const IR = @import("IR.zig");
+
 const Precedence = enum {
     None,
     Assignment,
@@ -131,6 +133,8 @@ pub const Scope = struct {
     InvokeExpr: []InvokeExpr,
     ArraySubExpr: []ArraySubExpr,
     FieldAccessExpr: []FieldAccessExpr,
+    IdentifierExpr: []Entity,
+    Loop: []Loop,
     const Builder = struct {
         Statements: ArrayList(Entity),
         VarDeclarations: ArrayList(VarDeclaration),
@@ -144,6 +148,7 @@ pub const Scope = struct {
         ArraySubExprs: ArrayList(ArraySubExpr),
         FieldAccessExpr: ArrayList(FieldAccessExpr),
         LastLoop: Entity,
+        Loops: ArrayList(Loop),
 
         //Todo: refactor this to encapsulate the initialization logic
         fn new(allocator: *Allocator, builder: *Function.Builder) u32 {
@@ -164,6 +169,7 @@ pub const Scope = struct {
                 .ArraySubExprs = ArrayList(ArraySubExpr).init(allocator),
                 .FieldAccessExpr = ArrayList(FieldAccessExpr).init(allocator),
                 .LastLoop = last,
+                .Loops = ArrayList(Loop).init(allocator),
             }) catch unreachable;
             return builder.currentScope;
         }
@@ -225,6 +231,15 @@ pub const InvokeExpr = struct {
         return invokeExpr;
     }
 };
+pub const IdentifierExpr = []const u8;
+fn newIdentifierExpr(fnBuilder: *Function.Builder, name: IdentifierExpr) Entity {
+    const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
+
+    const idx = currentScope.IdentifierExpr.items.len;
+    currentScope.IdentifierExpr.append(name) catch unreachable;
+
+    return Entity.new(idx, Scopes.IdentifierExpr, fnBuilder.currentScope);
+}
 pub const Assignment = struct {
     left: Entity,
     right: Entity,
@@ -286,6 +301,15 @@ pub const Comparison = struct {
         return comparisonId;
     }
 };
+
+pub const Loop = struct {
+    prefixScopeIdx: u32,
+    bodyScopeIdx: u32,
+    postfixScopeId: u32,
+    exitBlk: IR.Ref,
+    continueBlk: IR.Ref,
+};
+
 pub const Lib = struct {
     symbolNames: [][]const u8,
 
