@@ -238,6 +238,7 @@ pub const ArithmeticExpr = struct {
         Sub,
         Mul,
         Div,
+        Mod,
     };
 };
 
@@ -258,7 +259,7 @@ pub const InvokeExpr = struct {
     }
 };
 pub const IdentifierExpr = []const u8;
-fn newIdentifierExpr(fnBuilder: *Function.Builder, name: IdentifierExpr) Entity {
+pub fn newIdentifierExpr(fnBuilder: *Function.Builder, name: IdentifierExpr) Entity {
     const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
     const idx = currentScope.IdentifierExpr.items.len;
