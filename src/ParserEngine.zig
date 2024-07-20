@@ -9,6 +9,8 @@ const Allocator = std.mem.Allocator;
 const Entity = @import("Entity.zig").Entity;
 const Operator = Lexer.Operator;
 const EntityID = @import("EntityID.zig").ID;
+const ArrayList = std.ArrayList;
+
 pub const ParserEngine = struct {
     const Self = @This();
     const countersType = [std.enums.values(Lexer.Token).len]u32;
@@ -149,6 +151,33 @@ pub const ParserEngine = struct {
                     },
                     .Assignment => {
                         self.parseAssignment(leftExpr, newPrecedence);
+                    },
+                    .LeftParen => blk: {
+                        var argsLeftToParse = self.lexer.tokens[self.lexer.nextIdx] != .Operator or self.getToken(.Operator).value != .RightParen;
+                        var argsList = ArrayList(Entity).init(self.allocator);
+
+                        while (argsLeftToParse) {
+                            const argId = self.parseExpr();
+                            argsList.append(argId) catch unreachable;
+
+                            // to check if there are more arguments to parse
+                            const finalToken = self.lexer.tokens[self.lexer.nextIdx];
+                            argsLeftToParse = !(finalToken == .Operator and self.getToken(.Operator).value == .RightParen);
+
+                            if (argsLeftToParse) {
+                                if (finalToken == .Sign and self.getToken(.Sign).value == ',') {
+                                    self.consumeToken(.Sign);
+                                    continue;
+                                }
+                            } else {
+                                std.debug.panic("Expected ',' or ')' but got {any}", .{finalToken});
+                            }
+                        }
+
+                        if (self.getAndConsume(.Operator).value != .RightParen) {
+                            std.debug.panic("Expected ')' but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+                        }
+                        break :blk Parser.InvokeExpr.new(&self.fnBuilder, argsList.items, leftExpr);
                     },
                     //Todo: Implement the rest of the operators
                     else => std.debug.panic("Invalid operator! {any}", .{op}),
