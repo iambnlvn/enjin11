@@ -4,13 +4,12 @@ const Parser = @import("Parser.zig");
 const Function = Parser.Function;
 const Precedence = Parser.Precedence;
 const TokenTypeMap = @import("Parser.zig").TokenTypeMap;
-const Module = @import("Module").Module;
+const Module = @import("Module.zig").Module;
 const Allocator = std.mem.Allocator;
 const Entity = @import("Entity.zig").Entity;
 const Operator = Lexer.Operator;
 const EntityID = @import("EntityID.zig").ID;
 const ArrayList = std.ArrayList;
-
 pub const ParserEngine = struct {
     const Self = @This();
     const countersType = [std.enums.values(Lexer.Token).len]u32;

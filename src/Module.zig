@@ -16,7 +16,7 @@ pub const Module = struct {
     structTypes: []Type.Struct,
     libNames: []([]const u8),
 
-    const Builder = struct {
+    pub const Builder = struct {
         internalFns: ArrayList(Function.Internal),
         intLiterals: ArrayList(Parser.IntegerLiteral),
         structLiterals: ArrayList(Parser.StructLiteral),
