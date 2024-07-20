@@ -1,5 +1,5 @@
 const std = @import("std");
-const ArrayList = @import("ArrayList.zig");
+const ArrayList = std.ArrayList;
 
 const Function = @import("Parser.zig").Function;
 const Type = @import("Type.zig");
