@@ -97,6 +97,13 @@ pub const ParserEngine = struct {
                     const intValue = self.getAndConsume(.IntLiteral).value;
                     break :blk Parser.IntegerLiteral.new(&self.moduleBuilder.intLiterals, intValue, signedness, self.moduleBuilder.idx);
                 },
+                .Operator => {
+                    const op = self.getAndConsume(.Operator).value;
+                    break :blk switch (op) {
+                        .LeftBracket => self.parseArrayLiteral(),
+                        else => std.debug.panic("Invalid Operator {any}", .{op}),
+                    };
+                },
             }
         };
         return self.parseInfix(leftExpr, precedence);
@@ -178,7 +185,15 @@ pub const ParserEngine = struct {
                         }
                         break :blk Parser.InvokeExpr.new(&self.fnBuilder, argsList.items, leftExpr);
                     },
-                    //Todo: Implement the rest of the operators
+                    .LeftBracket => blk: {
+                        const arrayExpr = leftExpr;
+                        const arrayIdxExpr = self.parseExpr();
+                        if (self.lexer.tokens[self.lexer.nextIdx] != .Operator and self.getToken(.Operator).value != Operator.ID.RightBracket) {
+                            std.debug.panic("Expected right bracket after Aray subscription", .{});
+                        }
+                        break :blk Parser.ArraySubExpr.new(&self.fnBuilder, arrayExpr, arrayIdxExpr);
+                    },
+                    .Dot => Parser.FieldAccessExpr.new(&self.fnBuilder, leftExpr, self.parsePrecedence(comptime Precedence.Call)),
                     else => std.debug.panic("Invalid operator! {any}", .{op}),
                 };
             }
@@ -207,5 +222,25 @@ pub const ParserEngine = struct {
 
     fn parseExpr(self: *Self) Entity {
         return self.parsePrecedence(Precedence.Assignment);
+    }
+    fn parseArrayLiteral(self: *Self) Entity {
+        var rightBracketFound = false;
+        var arrayLiteralExprList = ArrayList(Entity).init(self.allocator);
+
+        while (!rightBracketFound) {
+            arrayLiteralExprList.append(self.parseExpr()) catch unreachable;
+            const nextToken = self.lexer.tokens[self.lexer.nextIdx];
+
+            if (nextToken == .Operator and self.getToken(.Operator).value == Operator.ID.RightBracket) {
+                rightBracketFound = true;
+                self.consumeToken(.Operator);
+            } else if (nextToken != .Sign or self.getToken(.Sign).value != ',') {
+                std.debug.panic("Expected ',' or ']' but got {any}", .{nextToken});
+            } else {
+                self.consumeToken(.Sign);
+            }
+            self.consumeToken(.Sign);
+        }
+        return Parser.ArrayLiteral.new(&self.moduleBuilder.arrayLiterals, arrayLiteralExprList.items, self.moduleBuilder.idx);
     }
 };
