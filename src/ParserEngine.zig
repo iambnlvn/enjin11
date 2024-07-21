@@ -104,6 +104,14 @@ pub const ParserEngine = struct {
                         else => std.debug.panic("Invalid Operator {any}", .{op}),
                     };
                 },
+                .Sign => {
+                    const sign = self.getAndConsume(.Sign).value;
+                    switch (sign) {
+                        '{' => return self.parseStructLiteral(),
+                        else => std.debug.panic("Invalid Sign {any}", .{sign}),
+                    }
+                },
+                else => std.debug.panic("Invalid token {any}", .{prefix}),
             }
         };
         return self.parseInfix(leftExpr, precedence);
@@ -223,6 +231,7 @@ pub const ParserEngine = struct {
     fn parseExpr(self: *Self) Entity {
         return self.parsePrecedence(Precedence.Assignment);
     }
+
     fn parseArrayLiteral(self: *Self) Entity {
         var rightBracketFound = false;
         var arrayLiteralExprList = ArrayList(Entity).init(self.allocator);
@@ -242,5 +251,38 @@ pub const ParserEngine = struct {
             self.consumeToken(.Sign);
         }
         return Parser.ArrayLiteral.new(&self.moduleBuilder.arrayLiterals, arrayLiteralExprList.items, self.moduleBuilder.idx);
+    }
+
+    fn parseStructLiteral(self: *Self) Entity {
+        var fieldIdentifiers = ArrayList(Parser.IdentifierExpr).init(self.allocator);
+        var fieldExprs = ArrayList(Entity).init(self.allocator);
+
+        // Note: empty struct are not allowed for now
+        if (self.lexer.tokens[self.lexer.nextIdx] == .Sign and self.getToken(.Sign).value == '}') {
+            std.debug.panic("Empty struct literals are not allowed", .{});
+        }
+
+        while (true) {
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Operator) std.debug.panic("Expected Dot operator but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+            if (self.getAndConsume(.Operator).value != Operator.ID.Dot) std.debug.panic("Expected Dot operator to initialize struct fields but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Identifier) std.debug.panic("Expected Identifier but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+
+            const fieldIdentifier = self.getAndConsume(.Identifier).value;
+            fieldIdentifiers.append(fieldIdentifier) catch unreachable;
+
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Operator or self.getToken(.Operator).value != Operator.ID.Assignment) {
+                std.debug.panic("Expected Assignment operator but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+            }
+
+            const fieldExpr = self.parseExpr();
+            fieldExprs.append(fieldExpr) catch unreachable;
+
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Sign) std.debug.panic("Expected comma or right brace found {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+
+            const afterFieldSign = self.getAndConsume(.sign) catch unreachable;
+            if (afterFieldSign.value == '}') break;
+            if (afterFieldSign.value != ',') std.debug.panic("Expected comma or right brace found {any}", .{afterFieldSign.value});
+        }
+        return Parser.StructLiteral.new(&self.moduleBuilder.structLiterals, fieldIdentifiers.items, self.moduleBuilder.idx);
     }
 };
