@@ -202,7 +202,7 @@ pub const Scope = struct {
     };
 };
 
-const VarDeclaration = struct {
+pub const VarDeclaration = struct {
     name: []const u8,
     type: Type,
 
@@ -396,3 +396,5 @@ test "IntegerLiteral.new adds multiple IntegerLiterals and returns correct Entit
     try expectEqual(list.items[1].value, value2);
     try expectEqual(list.items[1].isSigned, isSigned2);
 }
+
+pub fn main() !void {}

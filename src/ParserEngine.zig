@@ -285,4 +285,46 @@ pub const ParserEngine = struct {
         }
         return Parser.StructLiteral.new(&self.moduleBuilder.structLiterals, fieldIdentifiers.items, self.moduleBuilder.idx);
     }
+
+    fn parseStatement(self: *Self, parentScope: u32) void {
+        const nextToken = self.lexer.tokens[self.lexer.nextIdx];
+        var currentScope = &self.fnBuilder.scopeBuilders.items[parentScope];
+
+        switch (nextToken) {
+            .Identifier => {
+                const identifierName = self.getToken(.Identifier).value;
+                if (self.lexer.tokens[self.lexer.nextIdx + 1] == .Operator and self.getToken(.Operator).value == .Declaration) {
+                    self.consumeToken(.Identifier);
+                    self.consumeToken(.Operator);
+
+                    const varDeclarationId = Parser.VarDeclaration.new(&self.fnBuilder, identifierName, self.parseType()); //TODO:! implement parseType
+                    const afterDeclarationToken = self.lexer.tokens[self.lexer.nextIdx];
+
+                    if (afterDeclarationToken == .Operator) {
+                        if (self.getToken(.Operator).value == Operator.ID.Assignment) {
+                            self.consumeToken(.Operator);
+                            const initilaizerExpr = self.parseExpr();
+                            const assignmentIdx = currentScope.AssignmentExprs.items.len;
+                            currentScope.Assignments.append(.{
+                                .left = varDeclarationId,
+                                .right = initilaizerExpr,
+                            }) catch unreachable;
+
+                            const assignmentId = Entity.new(assignmentIdx, EntityID.Scope.Assignment, parentScope);
+                            currentScope.Statements.append(assignmentId) catch unreachable;
+                        } else {
+                            std.debug.panic("Expected assignment operator but got {any}", .{self.getToken(.Operator).value});
+                        }
+                    } else {
+                        std.debug.panic("Expected operator but got {any}", .{afterDeclarationToken});
+                    }
+                } else {
+                    currentScope.Statements.append(self.parseExprIdentifier()) catch unreachable;
+                }
+            },
+        }
+    }
+    fn parseExprIdentifier(self: *Self) Entity {
+        return self.parseInfix(Precedence.Assignment, self.parsePrefixIdentifier());
+    }
 };
