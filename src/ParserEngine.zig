@@ -10,6 +10,7 @@ const Entity = @import("Entity.zig").Entity;
 const Operator = Lexer.Operator;
 const EntityID = @import("EntityID.zig").ID;
 const ArrayList = std.ArrayList;
+const Type = @import("Type.zig");
 pub const ParserEngine = struct {
     const Self = @This();
     const countersType = [std.enums.values(Lexer.Token).len]u32;
@@ -297,7 +298,7 @@ pub const ParserEngine = struct {
                     self.consumeToken(.Identifier);
                     self.consumeToken(.Operator);
 
-                    const varDeclarationId = Parser.VarDeclaration.new(&self.fnBuilder, identifierName, self.parseType()); //TODO:! implement parseType
+                    const varDeclarationId = Parser.VarDeclaration.new(&self.fnBuilder, identifierName, self.parseType());
                     const afterDeclarationToken = self.lexer.tokens[self.lexer.nextIdx];
 
                     if (afterDeclarationToken == .Operator) {
@@ -346,5 +347,43 @@ pub const ParserEngine = struct {
     }
     fn parseExprIdentifier(self: *Self) Entity {
         return self.parseInfix(Precedence.Assignment, self.parsePrefixIdentifier());
+    }
+    fn parseType(self: *Self) Type {
+        switch (self.lexer.tokens[self.lexer.nextIdx]) {
+            .Identifier => return self.addUnresolvedType(self.lexer.tokens[self.lexer.nextIdx].value),
+            .Operator => {
+                switch (self.getAndConsume(.Operator)) {
+                    .LeftBracket => {
+                        const arrayTypeIdx = self.moduleBuilder.arrayTypes.items.len;
+                        const arrayLen = self.parseExpr();
+
+                        if (self.lexer.tokens[self.lexer.nextId] != .Operator and self.getAndConsume(.Operator).value != Operator.ID.RightBracket) {
+                            std.debug.panic("Expected right bracket but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+                        }
+
+                        self.moduleBuilder.arrayTypes.append(.{
+                            .type = self.parseType(),
+                            .exprLen = arrayLen.value,
+                        }) catch unreachable;
+                        return Type.Array.new(arrayTypeIdx, self.moduleBuilder.idx);
+                    },
+                    else => {
+                        std.debug.panic("Invalid operator {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+                    },
+                }
+            },
+            .Keyword => unreachable,
+            else => std.debug.panic("Invalid token {any}", .{self.lexer.tokens[self.lexer.nextIdx]}),
+        }
+    }
+
+    fn addUnresolvedType(self: *Self, typeIdentifier: []const u8) Type {
+        for (self.moduleBuilder.unresolvedTypes.items, 0..) |unresolvedType, idx| {
+            if (std.mem.eql(u8, unresolvedType.name, typeIdentifier)) {
+                return Type.newUnresolvedType(idx, self.moduleBuilder.idx);
+            }
+        }
+        self.moduleBuilder.unresolvedTypes.append(typeIdentifier) catch unreachable;
+        return Type.newUnresolvedType(self.moduleBuilder.unresolvedTypes.items.len, self.moduleBuilder.idx);
     }
 };
