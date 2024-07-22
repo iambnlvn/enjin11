@@ -322,6 +322,26 @@ pub const ParserEngine = struct {
                     currentScope.Statements.append(self.parseExprIdentifier()) catch unreachable;
                 }
             },
+            .Keyword => {
+                switch (self.getAndConsume(.Keyword).value) {
+                    .@"return" => {
+                        const afterReturnToken = self.lexer.tokens[self.lexer.nextIdx];
+                        const returnExpr = blk: {
+                            if (afterReturnToken != .Sign or self.getToken(.Sign).value != ';') {
+                                break :blk self.parseExpr();
+                            } else {
+                                break :blk null;
+                            }
+                        };
+                        const returnExprIdx = currentScope.ReturnExprs.items.len;
+                        const returnExprId = Entity.new(returnExprIdx, EntityID.Scope.ReturnExpr, parentScope);
+                        currentScope.ReturnExprs.append(.{
+                            .expr = returnExpr,
+                        }) catch unreachable;
+                        currentScope.Statements.append(returnExprId) catch unreachable;
+                    },
+                }
+            },
         }
     }
     fn parseExprIdentifier(self: *Self) Entity {
