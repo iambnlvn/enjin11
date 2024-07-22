@@ -12,7 +12,7 @@ pub const Module = struct {
     unresolvedTypes: []Type.UnresolvedType,
     sliceTypes: []Type.Slice,
     fnTypes: Type.Function,
-    ArrayTypes: []Type.Array,
+    arrayTypes: []Type.Array,
     structTypes: []Type.Struct,
     libNames: []([]const u8),
 
@@ -24,6 +24,7 @@ pub const Module = struct {
         unresolvedTypes: ArrayList(Type.UnresolvedType),
         sliceTypes: ArrayList(Type.Slice),
         fnTypes: ArrayList(Type.Function),
+        arrayTypes: ArrayList(Type.Array),
         structTypes: ArrayList(Type.Struct),
         libNames: ArrayList([]const u8),
         idx: u32,
