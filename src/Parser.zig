@@ -127,6 +127,7 @@ pub const Parent = struct {
     expr: Entity,
     scope: Entity,
 };
+//TODO:make naming consistent
 pub const Scope = struct {
     statements: []Entity,
     VarDeclaration: []VarDeclaration,
@@ -136,9 +137,10 @@ pub const Scope = struct {
     BreakExpr: []BreakExpr,
     ReturnExpr: []ReturnExpr,
     InvokeExpr: []InvokeExpr,
+    IdentifierExpr: []IdentifierExpr,
+    ArithmeticExpr: []ArithmeticExpr,
     ArraySubExpr: []ArraySubExpr,
     FieldAccessExpr: []FieldAccessExpr,
-    IdentifierExpr: []Entity,
     Loop: []Loop,
     Branches: []Branch,
     Parent: Parent,
@@ -152,6 +154,7 @@ pub const Scope = struct {
         BreakExprs: ArrayList(BreakExpr),
         ReturnExprs: ArrayList(ReturnExpr),
         InvokeExprs: ArrayList(InvokeExpr),
+        IdentifierExpr: ArrayList(IdentifierExpr),
         ArithmeticExprs: ArrayList(ArithmeticExpr),
         ArraySubExprs: ArrayList(ArraySubExpr),
         FieldAccessExpr: ArrayList(FieldAccessExpr),
@@ -174,6 +177,7 @@ pub const Scope = struct {
                 .BreakExprs = ArrayList(BreakExpr).init(allocator),
                 .ReturnExprs = ArrayList(ReturnExpr).init(allocator),
                 .InvokeExprs = ArrayList(InvokeExpr).init(allocator),
+                .IdentifierExpr = ArrayList(IdentifierExpr).init(allocator),
                 .ArithmeticExprs = ArrayList(ArithmeticExpr).init(allocator),
                 .ArraySubExprs = ArrayList(ArraySubExpr).init(allocator),
                 .FieldAccessExpr = ArrayList(FieldAccessExpr).init(allocator),
