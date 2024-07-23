@@ -122,6 +122,11 @@ pub const Function = struct {
         currentScope: u32,
     };
 };
+
+pub const Parent = struct {
+    expr: Entity,
+    scope: Entity,
+};
 pub const Scope = struct {
     statements: []Entity,
     VarDeclaration: []VarDeclaration,
@@ -135,6 +140,9 @@ pub const Scope = struct {
     FieldAccessExpr: []FieldAccessExpr,
     IdentifierExpr: []Entity,
     Loop: []Loop,
+    Branches: []Branch,
+    Parent: Parent,
+
     const Builder = struct {
         Statements: ArrayList(Entity),
         VarDeclarations: ArrayList(VarDeclaration),
@@ -149,8 +157,10 @@ pub const Scope = struct {
         FieldAccessExpr: ArrayList(FieldAccessExpr),
         LastLoop: Entity,
         Loops: ArrayList(Loop),
+        Branches: ArrayList(Branch),
+        Parent: Parent,
 
-        fn new(allocator: *Allocator, builder: *Function.Builder) u32 {
+        pub fn new(allocator: *Allocator, builder: *Function.Builder, parentExpr: Entity, parentScope: Entity) u32 {
             const last = if (builder.scopeBuilders.items.len == 0) std.mem.zeroes(Entity) else builder.scopeBuilders.items[builder.currentScope].LastLoop;
 
             builder.currentScope = @as(u32, @intCast(builder.scopeBuilders.items.len));
@@ -169,6 +179,8 @@ pub const Scope = struct {
                 .FieldAccessExpr = ArrayList(FieldAccessExpr).init(allocator),
                 .LastLoop = last,
                 .Loops = ArrayList(Loop).init(allocator),
+                .Branches = ArrayList(Branch).init(allocator),
+                .Parent = .{ .expr = parentExpr, .scope = parentScope },
             }) catch unreachable;
             return builder.currentScope;
         }
@@ -200,6 +212,13 @@ pub const Scope = struct {
         //     return builder.currentScope;
         // }
     };
+};
+
+pub const Branch = struct {
+    condition: Entity,
+    ifScope: u32,
+    elseScope: u32,
+    exitBlk: IR.Ref,
 };
 
 pub const VarDeclaration = struct {
