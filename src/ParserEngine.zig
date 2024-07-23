@@ -341,6 +341,34 @@ pub const ParserEngine = struct {
                         }) catch unreachable;
                         currentScope.Statements.append(returnExprId) catch unreachable;
                     },
+                    .@"if" => {
+                        const branchIdx = currentScope.Branches.items.len;
+                        currentScope.Branches.append(undefined) catch unreachable;
+                        const branchId = Entity.new(branchIdx, EntityID.Scope.Branches, parentScope);
+                        currentScope.Statements.append(branchId) catch unreachable;
+
+                        const conditionExpr = self.parseExpr();
+                        const ifScopeIdx = self.parseScope(branchId);
+
+                        const elseScopeIdx = blk: {
+                            if (self.lexer.tokens[self.lexer.nextIdx] == .Keyword and self.getToken(.Keyword).value == .@"else") {
+                                self.consumeToken(.Keyword);
+                                break :blk self.parseScope(branchId);
+                            } else {
+                                break :blk null;
+                            }
+                        };
+                        currentScope = &self.fnBuilder.scopeBuilders.items[parentScope];
+                        var branch = &currentScope.Branches.items[branchIdx];
+
+                        branch.* = Parser.Branch{
+                            .condition = conditionExpr,
+                            .ifScope = ifScopeIdx,
+                            .elseScope = elseScopeIdx,
+                            .exitBlk = IR.Ref.Null,
+                        };
+                        return;
+                    },
                 }
             },
         }
