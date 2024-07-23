@@ -11,6 +11,8 @@ const Operator = Lexer.Operator;
 const EntityID = @import("EntityID.zig").ID;
 const ArrayList = std.ArrayList;
 const Type = @import("Type.zig");
+const IR = @import("IR.zig");
+
 pub const ParserEngine = struct {
     const Self = @This();
     const countersType = [std.enums.values(Lexer.Token).len]u32;
@@ -413,5 +415,68 @@ pub const ParserEngine = struct {
         }
         self.moduleBuilder.unresolvedTypes.append(typeIdentifier) catch unreachable;
         return Type.newUnresolvedType(self.moduleBuilder.unresolvedTypes.items.len, self.moduleBuilder.idx);
+    }
+
+    fn parseScope(self: *Self, parentExpr: Entity) u32 {
+        const prevScope = self.fnBuilder.currentScope;
+        const newScope = Parser.Scope.new(self.allocator, &self.fnBuilder, parentExpr, prevScope);
+
+        const parentExprId = parentExpr.getArrayId(.scope);
+        const scopeNotAllowed = parentExprId == .Loops or parentExprId == .Branches;
+
+        if (scopeNotAllowed) {
+            if (self.lexer.tokens[self.lexer.nextId] == .Sign and self.getToken(.Sign).value == '{') {
+                self.processScope(newScope);
+            } else {
+                self.parseStatement(newScope);
+            }
+        } else {
+            self.processScope(newScope);
+        }
+
+        self.endScope(newScope);
+        return newScope;
+    }
+
+    fn processScope(self: *Self, newCurrentScope: u32) void {
+        const expectedLeftBrace = self.lexer.tokens[self.lexer.nextIdx];
+
+        if (expectedLeftBrace != .Sign or self.getToken(.Sign).value != '{') {
+            std.debug.panic("Expected left brace but got {any}", .{expectedLeftBrace});
+        }
+        self.consumeToken(.Sign);
+
+        var nextToken = self.lexer.tokens[self.lexer.nextIdx];
+        var isEndOfBlock = nextToken == .Sign and self.getToken(.Sign).value == '}';
+        while (!isEndOfBlock) {
+            self.parseStatement(newCurrentScope);
+            nextToken = self.lexer.tokens[self.lexer.nextIdx];
+            isEndOfBlock = nextToken == .Sign and self.getToken(.Sign).value == '}';
+        }
+        if (self.lexer.tokens[self.lexer.nextIdx] != .Sign or self.getAndConsume(.Sign).value != '}') {
+            std.debug.panic("Expected right brace but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+        }
+    }
+
+    fn endScope(self: *Self, scopeIdx: u32) void {
+        var scopeBuilder = &self.fnBuilder.scopeBuilders.items[scopeIdx];
+        self.fnBuilder.scopes.items[scopeIdx] = .{
+            .Statements = scopeBuilder.Statements.items,
+            .VarDeclaration = scopeBuilder.VarDeclarations.items,
+            .AssignmentExprs = scopeBuilder.Assignments.items,
+            .CompoundAssignmentExprs = scopeBuilder.CompoundAssignments.items,
+            .Comparison = scopeBuilder.Comparisons.items,
+            .BreakExpr = scopeBuilder.BreakExprs.items,
+            .ReturnExpr = scopeBuilder.ReturnExprs.items,
+            .InvokeExpr = scopeBuilder.InvokeExprs.items,
+            .IdentifierExpr = scopeBuilder.IdentifierExpr.items,
+            .ArithmeticExpr = scopeBuilder.ArithmeticExprs.items,
+            .ArraySubExpr = scopeBuilder.ArraySubExprs.items,
+            .FieldAccessExpr = scopeBuilder.FieldAccessExprs.items,
+            .Loops = scopeBuilder.Loops.items,
+            .Branches = scopeBuilder.Branches.items,
+            .Parent = scopeBuilder.Parent,
+        };
+        self.fnBuilder.currentScope = scopeBuilder.Parent.scope;
     }
 };
