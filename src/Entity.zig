@@ -45,4 +45,7 @@ pub const Entity = packed struct {
             return @as(LevelToArrayIdMap[@intFromEnum(level)], @enumFromInt(@as(std.meta.Int(.unsigned, @bitSizeOf(LevelToArrayIdMap[@intFromEnum(level)])), @intCast((self.value & (std.math.maxInt(arrayIdEnumType) << arrayIdPosition)) >> arrayIdPosition))));
         }
     }
+    pub fn getArrayIndex(self: Self) u32 {
+        return @as(u32, @intCast((self.value & (std.math.maxInt(arrayIdEnumType) << arrayIdPosition)) >> arrayIdPosition));
+    }
 };

@@ -145,7 +145,7 @@ pub const Scope = struct {
     Branches: []Branch,
     Parent: Parent,
 
-    const Builder = struct {
+    pub const Builder = struct {
         Statements: ArrayList(Entity),
         VarDeclarations: ArrayList(VarDeclaration),
         Assignments: ArrayList(Assignment),
