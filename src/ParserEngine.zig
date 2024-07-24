@@ -438,13 +438,42 @@ pub const ParserEngine = struct {
                         };
                         return;
                     },
+                    .@"break" => {
+                        var scope = &self.fnBuilder.scopeBuilders.items[parentScope];
+                        const lastLoop = scope.LastLoop;
+
+                        if (lastLoop.value == std.mem.zeros(Entity).value) {
+                            std.debug.panic("Break statement outside of loop", .{});
+                        }
+
+                        const breakExprIdx = EntityID.Scope.BreakExpr.items.len;
+                        const breakExprId = Entity.new(breakExprIdx, EntityID.Scope.BreakExpr, self.fnBuilder.currentScope);
+
+                        const breakExpr = Parser.BreakExpr{
+                            .loop2Break = lastLoop,
+                        };
+
+                        scope.BreakExprs.append(breakExpr) catch unreachable;
+                        scope.Statements.append(breakExprId) catch unreachable;
+                    },
+                    else => std.debug.panic("Invalid keyword {any}", .{self.lexer.tokens[self.lexer.nextIdx]}),
                 }
             },
+            else => std.debug.panic("Invalid token {any}", .{nextToken}),
+        }
+
+        if (self.lexer.tokens[self.lexer.nextId] == .Sign and self.getToken(.Sign).value == ';') {
+            self.consumeToken(.Sign);
+            return;
+        } else {
+            std.debug.panic("Expected semicolon but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
         }
     }
+
     fn parseExprIdentifier(self: *Self) Entity {
         return self.parseInfix(Precedence.Assignment, self.parsePrefixIdentifier());
     }
+
     fn parseType(self: *Self) Type {
         switch (self.lexer.tokens[self.lexer.nextIdx]) {
             .Identifier => return self.addUnresolvedType(self.lexer.tokens[self.lexer.nextIdx].value),
