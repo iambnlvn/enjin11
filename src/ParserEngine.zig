@@ -371,6 +371,73 @@ pub const ParserEngine = struct {
                         };
                         return;
                     },
+                    .@"for" => {
+                        const loopIdx = @as(u32, @intCast(currentScope.Loops.items.len));
+                        const loopId = Entity.new(loopIdx, EntityID.Scope.Loops, parentScope);
+                        currentScope.LastLoop = loopId;
+                        currentScope.Loops.append(undefined) catch unreachable;
+
+                        const expectedIdentifier = self.lexer.tokens[self.lexer.nextIdx];
+
+                        if (expectedIdentifier != .Identifier) {
+                            std.debug.panic("Expected identifier but got {any}", .{expectedIdentifier});
+                        }
+
+                        const iterationDecId = self.getAndConsume(.Identifier).value;
+                        const iterationDecValue = Parser.IntegerLiteral.new(&self.moduleBuilder.intLiterals, 0, false, self.moduleBuilder.idx);
+                        const iterationDecType = self.addUnresolvedType("u32");
+                        const iterationDeclaration = Parser.VarDeclaration.new(&self.fnBuilder, iterationDecId, iterationDecType);
+                        const iterationInit = Parser.Assignment.new(&self.fnBuilder, iterationDeclaration, iterationDecValue);
+
+                        currentScope.Statements.append(iterationInit) catch unreachable;
+                        currentScope.Statements.append(loopId) catch unreachable;
+
+                        const prefixScopeIdx = Parser.Scope.Builder.new(self.allocator, &self.fnBuilder, loopId, parentScope);
+
+                        currentScope = &self.fnBuilder.scopeBuilders.items[prefixScopeIdx];
+
+                        if (self.lexer.tokens[self.lexer.nextIdx] != .Operator or self.getToken(.Operator).value != .Declaration) {
+                            std.debug.panic("Expected declaration operator but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+                        }
+
+                        self.consumeToken(.Operator);
+
+                        const rightToken = self.lexer.tokens[self.lexer.nextIdx];
+
+                        const rightExpr = blk: {
+                            switch (rightToken) {
+                                .IntLiteral => {
+                                    const intValue = self.getAndConsume(.IntLiteral).value;
+                                    break :blk Parser.IntegerLiteral.new(&self.moduleBuilder.intLiterals, intValue, false, self.moduleBuilder.idx);
+                                },
+                                else => std.debug.panic("Expected integer literal but got {any}", .{rightToken}),
+                            }
+                        };
+                        const prefixComp = Parser.Comparison.new(&self.fnBuilder, Parser.Comparison.ID.LessThan, iterationDeclaration, rightExpr);
+
+                        currentScope.Statements.append(prefixComp) catch unreachable;
+                        self.endScope(prefixScopeIdx);
+                        const bodyScopeIdx = self.parseScope(loopId);
+
+                        const postScopeIdx = Parser.Scope.Builder.new(self.allocator, &self.fnBuilder, loopId, parentScope);
+                        const postIncrementValue = Parser.IntegerLiteral.new(&self.moduleBuilder.intLiterals, 1, false, self.moduleBuilder.idx);
+                        const postCompoundAssignment = Parser.CompoundAssignment.new(&self.fnBuilder, Parser.ArithmeticExpr.ID.Add, postIncrementValue, Parser.ArithmeticExpr.ID.Add);
+
+                        self.fnBuilder.scopeBuilders.items[postScopeIdx].Statements.append(postCompoundAssignment) catch unreachable;
+                        self.endScope(postScopeIdx);
+
+                        currentScope = &self.fnBuilder.scopeBuilders.items[parentScope];
+                        var forLoop = &currentScope.Loops.items[loopIdx];
+
+                        forLoop.* = Parser.Loop{
+                            .bodyScopeIdx = prefixScopeIdx,
+                            .bodyScopeIdx = bodyScopeIdx,
+                            .postfixScopeIdx = postScopeIdx,
+                            .exitBlk = IR.Ref.Null,
+                            .continueBlk = IR.Ref.Null,
+                        };
+                        return;
+                    },
                 }
             },
         }
