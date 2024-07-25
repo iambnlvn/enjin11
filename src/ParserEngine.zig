@@ -15,14 +15,14 @@ const IR = @import("IR.zig");
 
 pub const ParserEngine = struct {
     const Self = @This();
-    const countersType = [std.enums.values(Lexer.Token).len]u32;
+    pub const countersType = [std.enums.values(Lexer.Token).len]u32;
 
     allocator: *Allocator,
     fnBuilder: Function.Builder,
     moduleBuilder: Module.Builder,
     lexer: TokenWalker,
 
-    const TokenWalker = struct {
+    pub const TokenWalker = struct {
         nextIdx: u64,
         counters: countersType,
         tokens: []Lexer.Token,
@@ -361,8 +361,7 @@ pub const ParserEngine = struct {
                             }
                         };
                         currentScope = &self.fnBuilder.scopeBuilders.items[parentScope];
-                        var branch = &currentScope.Branches.items[branchIdx];
-
+                        const branch = &currentScope.Branches.items[branchIdx];
                         branch.* = Parser.Branch{
                             .condition = conditionExpr,
                             .ifScope = ifScopeIdx,
@@ -427,11 +426,11 @@ pub const ParserEngine = struct {
                         self.endScope(postScopeIdx);
 
                         currentScope = &self.fnBuilder.scopeBuilders.items[parentScope];
-                        var forLoop = &currentScope.Loops.items[loopIdx];
+                        const forLoop = &currentScope.Loops.items[loopIdx];
 
                         forLoop.* = Parser.Loop{
-                            .bodyScopeIdx = prefixScopeIdx,
                             .bodyScopeIdx = bodyScopeIdx,
+                            .prefixScopeIdx = prefixScopeIdx,
                             .postfixScopeIdx = postScopeIdx,
                             .exitBlk = IR.Ref.Null,
                             .continueBlk = IR.Ref.Null,
@@ -555,7 +554,7 @@ pub const ParserEngine = struct {
     }
 
     fn endScope(self: *Self, scopeIdx: u32) void {
-        var scopeBuilder = &self.fnBuilder.scopeBuilders.items[scopeIdx];
+        const scopeBuilder = &self.fnBuilder.scopeBuilders.items[scopeIdx];
         self.fnBuilder.scopes.items[scopeIdx] = .{
             .Statements = scopeBuilder.Statements.items,
             .VarDeclaration = scopeBuilder.VarDeclarations.items,
