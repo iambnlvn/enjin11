@@ -112,11 +112,11 @@ pub const Function = struct {
     argNames: [][]const u8,
     type: Type.Function,
 
-    const Internal = struct {
+    pub const Internal = struct {
         declaration: Function,
         scopes: []Scope,
     };
-    const Builder = struct {
+    pub const Builder = struct {
         scopeBuilders: ArrayList(Scope.Builder),
         scopes: ArrayList(Scope),
         currentScope: u32,

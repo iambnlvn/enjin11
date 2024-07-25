@@ -133,7 +133,7 @@ pub const Lexer = struct {
         LineCount: u64,
     };
 
-    fn analyze(allocator: Allocator, src: []const u8) Lexems {
+    pub fn analyze(allocator: Allocator, src: []const u8) Lexems {
         var tokenizer = Tokenizer{
             .currentIdx = 0,
             .LineCount = 0,
