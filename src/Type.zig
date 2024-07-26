@@ -113,6 +113,15 @@ pub const Pointer = struct {
     }
 };
 
+pub const Builtin = struct {
+    const ID = enum {
+        voidType,
+        noreturnType,
+    };
+    pub const voidType = Type{ .value = (@as(u64, @intFromEnum(Type.ID.Builtin)) << Type.ID.position) | @as(u64, @intFromEnum(Builtin.ID.voidType)) };
+    pub const noreturnType = Type{ .value = (@as(u64, @intFromEnum(Type.ID.Builtin)) << Type.ID.position) | @as(u64, @intFromEnum(Builtin.ID.noreturnType)) };
+};
+
 fn constructTypeValue(id: Type.ID, moduleIdx: u64, idx: u64) Type {
     return .{ .value = (@as(u64, @intFromEnum(id)) << Type.ID.position) | (moduleIdx << Module.position) | idx };
 }
