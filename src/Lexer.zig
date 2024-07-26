@@ -44,6 +44,7 @@ pub const Operator = packed struct {
         Xor,
         ShiftLeft,
         ShiftRight,
+        Arrow,
     };
 };
 
