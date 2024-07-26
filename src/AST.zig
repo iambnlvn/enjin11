@@ -88,6 +88,82 @@ pub const AST = struct {
             .libNames = ArrayList([]const u8).init(allocator),
             .idx = @as(u32, @intCast(moduleIdx)),
         } };
+
         const tokenCount = parser.lexer.tokens.len;
+        while (parser.lexer.nextIdx < tokenCount) {
+            const topLevelDeclarationNameTOken = parser.lexer.tokens[parser.lexer.nextIdx];
+            if (topLevelDeclarationNameTOken != .Identifier) {
+                std.debug.panic("Top level declaration must start with an identifier", .{});
+            }
+
+            const tldName = parser.getAndConsume(.Identifier).value;
+            if (parser.lexer.nextIdx + 2 >= parser.lexer.tokens.len) {
+                std.debug.panic("Unexpected end of file", .{});
+            }
+
+            const nextToken = parser.lexer.tokens[parser.lexer.nextIdx];
+
+            if (nextToken == .Operator) {
+                const operator = parser.getAndConsume(.Operator);
+
+                if (operator.value == .Constant) {
+                    const afterConstToken = parser.lexer.tokens[parser.lexer.nextIdx];
+
+                    if (afterConstToken == .Operator) {
+                        const afterConstOp = parser.getAndConsume(.Operator);
+                        if (afterConstOp.value == .LeftParen) {
+                            const leftParenToken = parser.lexer.tokens[parser.lexer.nextIdx];
+                            var argNameList = ArrayList([]const u8).init(parser.allocator);
+                            var argTypeList = ArrayList(Type).init(parser.allocator);
+                            var argsLeft: bool = blk: {
+                                if (leftParenToken == .Operator) {
+                                    const leftParenNextOp = parser.getToken(.Operator);
+                                    if (leftParenNextOp.value == .RightParen) {
+                                        break :blk false;
+                                    }
+                                }
+                                break :blk true;
+                            };
+                            while (argsLeft) {
+                                if (parser.lexer.tokens[parser.lexer.nextIdx] != .Identifier) {
+                                    std.debug.panic("Expected identifier, Expected argument name, found: {any}", .{parser.lexer.tokens[parser.lexer.nextIdx]});
+                                }
+                                const argName = parser.getAndConsume(.Identifier).value;
+                                const colonTypeToken = parser.lexer.tokens[parser.lexer.nextIdx];
+                                if ((colonTypeToken == .Operator and parser.getToken(.Operator).value != .Declaration) or colonTypeToken != .Operator) {
+                                    std.debug.panic("Expected colon, Expected argument type, found: {any}", .{colonTypeToken});
+                                }
+                                parser.consumeToken(.Operator);
+                                const argType = parser.parseType();
+                                argNameList.append(argName) catch unreachable;
+                                argTypeList.append(argType) catch unreachable;
+
+                                const afterArgToken = parser.lexer.tokens[parser.lexer.nextIdx];
+                                argsLeft = !(afterArgToken == .Operator and parser.getToken(.Operator).value == .RightParen);
+                                if (argsLeft) {
+                                    if (afterArgToken == .Sign and parser.getToken(.Sign).value == .Comma) {
+                                        parser.consumeToken(.Sign);
+                                        continue;
+                                    } else {
+                                        std.debug.panic("Expected comma, Expected argument separator, found: {any}", .{afterArgToken});
+                                    }
+                                }
+                                if (!(parser.lexer.tokens[parser.lexer.nextIdx] == .Operator and parser.getToken(.Operator).value == .RightParen)) {
+                                    std.debug.panic("Expected right parenthesis, Expected end of argument list, found: {any}", .{parser.lexer.tokens[parser.lexer.nextIdx]});
+                                }
+                                parser.consumeToken(.Operator);
+                                var returnType: Type = undefined;
+                                if (parser.lexer.tokens[parser.lexer.nextIdx] == .Operator and parser.getToken(.Operator).value == .Arrow) {
+                                    parser.consumeToken(.Operator);
+                                    returnType = parser.parseType();
+                                } else {
+                                    returnType = Type.Builtin.voidType;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 };
