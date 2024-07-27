@@ -48,4 +48,8 @@ pub const Entity = packed struct {
     pub fn getArrayIndex(self: Self) u32 {
         return @as(u32, @intCast((self.value & (std.math.maxInt(arrayIdEnumType) << arrayIdPosition)) >> arrayIdPosition));
     }
+
+    pub fn getIdx(self: Self) u32 {
+        return @as(u32, @truncate(self.value));
+    }
 };
