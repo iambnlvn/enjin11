@@ -212,4 +212,12 @@ pub const AST = struct {
         self.moduleNames[moduleIdx] = sourceFile;
         return moduleId;
     }
+    pub fn importModule(self: *Self, allocator: *Allocator, sourceFile: []const u8, target: std.Target, parentModule: Entity) Entity {
+        for (self.moduleNames[0..self.moduleLen], 0..) |moduleName, idx| {
+            if (std.mem.eql(u8, moduleName, sourceFile)) {
+                return Entity.new(idx, EntityId.Global.Modules, parentModule.getIdx());
+            }
+        }
+        return self.parseModule(allocator, sourceFile, target, parentModule);
+    }
 };
