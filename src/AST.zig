@@ -159,11 +159,57 @@ pub const AST = struct {
                                 } else {
                                     returnType = Type.Builtin.voidType;
                                 }
+                                var next = parser.lexer.tokens[parser.lexer.nextIdx];
+                                var attributes: u64 = 0;
+                                while (next == .Keyword) : (next = parser.lexer.tokens[parser.lexer.nextIdx]) {
+                                    const keyword = parser.getAndConsume(.Keyword).value;
+                                    switch (keyword) {
+                                        .noreturn => attributes |= 1 << @intFromEnum(Type.Function.Attribute.noreturn),
+                                        else => std.debug.panic("Unknown function attribute: {any}", .{keyword}),
+                                    }
+                                }
+                                const isNotReturn = (attributes & (1 << @intFromEnum(Type.Function.Attribute.noreturn)) >> @intFromEnum(Type.Function.Attribute.noreturn)) != 0;
+                                if (isNotReturn) {
+                                    returnType = Type.Builtin.noReturnType;
+                                }
+
+                                const fnType = Type.Function{
+                                    .returnType = returnType,
+                                    .argTypes = argTypeList.items,
+                                    .attributes = attributes,
+                                };
                             }
+                        } else if (afterConstOp == .Keyword) {
+                            const keyword = parser.getAndConsume(.Keyword).value;
+                            if (keyword.value == .@"struct") {
+                                // TODO: implement a parseStruct method
+                            } else {
+                                unreachable;
+                            }
+                        } else {
+                            unreachable;
                         }
                     }
+                } else {
+                    unreachable;
                 }
+            } else {
+                std.debug.panic("Expected operator, Expected declaration operator, found: {any}", .{nextToken});
             }
         }
+        self.modules[moduleIdx] = Module{
+            .internalFns = parser.moduleBuilder.internalFns.items,
+            .intLiterals = parser.moduleBuilder.intLiterals.items,
+            .libNames = parser.moduleBuilder.libNames.items,
+            .structLiterals = parser.moduleBuilder.structLiterals.items,
+            .sliceTypes = parser.moduleBuilder.sliceTypes.items,
+            .fnTypes = parser.moduleBuilder.fnTypes.items,
+            .arrayTypes = parser.moduleBuilder.arrayTypes.items,
+            .structTypes = parser.moduleBuilder.structTypes.items,
+            .unresolvedTypes = parser.moduleBuilder.unresolvedTypes.items,
+            .arrayLiterals = parser.moduleBuilder.arrayLiterals.items,
+        };
+        self.moduleNames[moduleIdx] = sourceFile;
+        return moduleId;
     }
 };

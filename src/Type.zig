@@ -62,7 +62,7 @@ pub const Function = struct {
     returnType: Type,
     attributes: u64,
 
-    const Attribute = enum(u64) {
+    pub const Attribute = enum(u64) {
         noreturn,
     };
 
