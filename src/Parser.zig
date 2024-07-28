@@ -116,6 +116,20 @@ pub const Function = struct {
         declaration: Function,
         scopes: []Scope,
     };
+    pub const External = struct {
+        declaration: Function,
+        idx: Index,
+        pub const Index = struct {
+            function: u16,
+            library: u16,
+        };
+        pub fn fromU32(idx: u32) Index {
+            return @as(*const Index, @ptrCast(&idx)).*;
+        }
+        pub fn toU32(self: *const Index) u32 {
+            return @as(*align(2) const u32, @ptrCast(self)).*;
+        }
+    };
     pub const Builder = struct {
         scopeBuilders: ArrayList(Scope.Builder),
         scopes: ArrayList(Scope),
@@ -363,7 +377,7 @@ pub const Loop = struct {
 pub const Lib = struct {
     symbolNames: [][]const u8,
 
-    const Builder = struct {
+    pub const Builder = struct {
         symbolNames: ArrayList([]const u8),
     };
 };
