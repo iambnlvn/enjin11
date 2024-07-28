@@ -6,6 +6,7 @@ const Type = @import("Type.zig");
 const Parser = @import("Parser.zig");
 pub const Module = struct {
     internalFns: []Function.Internal,
+    externalFns: []Function.External,
     intLiterals: []Parser.IntegerLiteral,
     structLiterals: []Parser.StructLiteral,
     arrayLiterals: []Parser.ArrayLiteral,
@@ -15,9 +16,11 @@ pub const Module = struct {
     arrayTypes: []Type.Array,
     structTypes: []Type.Struct,
     libNames: []([]const u8),
+    libs: []Parser.Lib.Builder,
 
     pub const Builder = struct {
         internalFns: ArrayList(Function.Internal),
+        externalFns: ArrayList(Function.External),
         intLiterals: ArrayList(Parser.IntegerLiteral),
         structLiterals: ArrayList(Parser.StructLiteral),
         arrayLiterals: ArrayList(Parser.ArrayLiteral),
@@ -27,6 +30,7 @@ pub const Module = struct {
         arrayTypes: ArrayList(Type.Array),
         structTypes: ArrayList(Type.Struct),
         libNames: ArrayList([]const u8),
+        libs: ArrayList(Parser.Lib.Builder),
         idx: u32,
     };
 };
