@@ -161,6 +161,7 @@ pub const AST = struct {
                                 }
                                 var next = parser.lexer.tokens[parser.lexer.nextIdx];
                                 var attributes: u64 = 0;
+                                var externalLibName: []const u8 = undefined;
                                 while (next == .Keyword) : (next = parser.lexer.tokens[parser.lexer.nextIdx]) {
                                     const keyword = parser.getAndConsume(.Keyword).value;
                                     switch (keyword) {
@@ -169,6 +170,7 @@ pub const AST = struct {
                                     }
                                 }
                                 const isNotReturn = (attributes & (1 << @intFromEnum(Type.Function.Attribute.noreturn)) >> @intFromEnum(Type.Function.Attribute.noreturn)) != 0;
+                                const hasBody = (attributes & (1 << @intFromEnum(Type.Function.Attribute.@"extern"))) >> @intFromEnum(Type.Function.Attribute.@"extern") == 0;
                                 if (isNotReturn) {
                                     returnType = Type.Builtin.noReturnType;
                                 }
@@ -178,6 +180,72 @@ pub const AST = struct {
                                     .argTypes = argTypeList.items,
                                     .attributes = attributes,
                                 };
+                                if (hasBody) {
+                                    const currentFnIdx = parser.moduleBuilder.internalFns.items.len;
+                                    const fnId = Entity.new(currentFnIdx, EntityId.Module.InternalFn, moduleIdx);
+                                    parser.fnBuilder = Parser.Function.Builder{
+                                        .currentScope = 0,
+                                        .scopeBuilders = ArrayList(Parser.Scope.Builder).init(allocator),
+                                        .scopes = ArrayList(Parser.Scope).init(allocator),
+                                    };
+                                    ParserEngine.parseScope(fnId);
+                                    parser.moduleBuilder.internalFns.append(Parser.Function.Internal{
+                                        .declaration = .{
+                                            .argNames = argNameList.items,
+                                            .name = tldName,
+                                            .type = fnType,
+                                        },
+                                        .scopes = parser.fnBuilder.scopes.items,
+                                    }) catch unreachable;
+                                } else {
+                                    if (parser.lexer.tokens[parser.lexer.nextIdx] != .Sign) {
+                                        std.debug.panic("Expected semicolon, Expected end of function declaration, found: {any}", .{parser.lexer.tokens[parser.lexer.nextIdx]});
+                                    }
+                                    const semiColToken = parser.getAndConsume(.Sign);
+                                    if (semiColToken.value != .Semicolon) {
+                                        std.debug.panic("Expected semicolon, Expected end of function declaration, found: {any}", .{semiColToken});
+                                    }
+                                    parser.moduleBuilder.internalFns.append(Parser.Function.External{ .declaration = .{
+                                        .argNames = argNameList.items,
+                                        .name = tldName,
+                                        .type = fnType,
+                                    }, .idx = blk: {
+                                        const functionName = tldName;
+                                        for (parser.moduleBuilder.libs.items, 0..) |libName, libIdx| {
+                                            if (std.mem.eql(u8, libName, functionName)) {
+                                                var symNames = &parser.moduleBuilder.libNames.items[libIdx];
+                                                for (symNames.items, 0..) |symName, symIdx| {
+                                                    if (std.mem.eql(u8, symName, functionName)) {
+                                                        break :blk .{
+                                                            .function = @as(u16, @intCast(symIdx)),
+                                                            .library = @as(u16, @intCast(libIdx)),
+                                                        };
+                                                    }
+                                                }
+                                                const symbolIdx = symNames.items.len;
+                                                symNames.append(functionName) catch unreachable;
+                                                break :blk .{
+                                                    .function = @as(u16, @intCast(symbolIdx)),
+                                                    .library = @as(u16, @intCast(libIdx)),
+                                                };
+                                            }
+                                        }
+                                        const libIdx = parser.moduleBuilder.libNames.items.len;
+                                        parser.moduleBuilder.libNames.append(externalLibName) catch unreachable;
+                                        parser.moduleBuilder.libs.append(.{
+                                            .symbolNames = symBlk: {
+                                                var newLibSymNames = ArrayList([]const u8).init(allocator);
+                                                newLibSymNames.append(functionName) catch unreachable;
+                                                break :symBlk newLibSymNames;
+                                            },
+                                        }) catch unreachable;
+                                        const symIdx = 0;
+                                        break :blk .{
+                                            .function = @as(symIdx, @intCast(u16)),
+                                            .library = @as(u16, @intCast(libIdx)),
+                                        };
+                                    } }) catch unreachable;
+                                }
                             }
                         } else if (afterConstOp == .Keyword) {
                             const keyword = parser.getAndConsume(.Keyword).value;
@@ -199,6 +267,7 @@ pub const AST = struct {
         }
         self.modules[moduleIdx] = Module{
             .internalFns = parser.moduleBuilder.internalFns.items,
+            .externalFns = parser.moduleBuilder.externalFns.items,
             .intLiterals = parser.moduleBuilder.intLiterals.items,
             .libNames = parser.moduleBuilder.libNames.items,
             .structLiterals = parser.moduleBuilder.structLiterals.items,

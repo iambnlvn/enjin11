@@ -512,7 +512,7 @@ pub const ParserEngine = struct {
         return Type.newUnresolvedType(self.moduleBuilder.unresolvedTypes.items.len, self.moduleBuilder.idx);
     }
 
-    fn parseScope(self: *Self, parentExpr: Entity) u32 {
+    pub fn parseScope(self: *Self, parentExpr: Entity) u32 {
         const prevScope = self.fnBuilder.currentScope;
         const newScope = Parser.Scope.new(self.allocator, &self.fnBuilder, parentExpr, prevScope);
 
