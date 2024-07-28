@@ -64,6 +64,7 @@ pub const Function = struct {
 
     pub const Attribute = enum(u64) {
         noreturn,
+        @"extern",
     };
 
     pub fn new(idx: u64, moduleIdx: u64) Type {

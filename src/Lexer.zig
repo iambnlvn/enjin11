@@ -67,6 +67,7 @@ pub const Keyword = struct {
         void,
         @"switch",
         @"struct",
+        @"extern",
     };
 };
 
