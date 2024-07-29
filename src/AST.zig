@@ -250,7 +250,7 @@ pub const AST = struct {
                         } else if (afterConstOp == .Keyword) {
                             const keyword = parser.getAndConsume(.Keyword).value;
                             if (keyword.value == .@"struct") {
-                                // TODO: implement a parseStruct method
+                                parser.parseStruct(tldName);
                             } else {
                                 unreachable;
                             }

@@ -512,6 +512,57 @@ pub const ParserEngine = struct {
         return Type.newUnresolvedType(self.moduleBuilder.unresolvedTypes.items.len, self.moduleBuilder.idx);
     }
 
+    pub fn parseStruct(self: *Self, name: []const u8) Type {
+        if (self.lexer.tokens[self.lexer.nextIdx] != .Sign and self.getToken(.sign).value != '{') {
+            std.debug.panic("Expected left brace for struct declaration but got {any}", .{self.lexer.tokens[self.lexer.nextId]});
+        }
+
+        self.consumeToken(.sign);
+
+        var fieldTypes = ArrayList(Type).init(self.allocator);
+        var fieldNames = ArrayList([]const u8).init(self.allocator);
+
+        while (true) {
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Identifier) {
+                std.debug.panic("Expected Identifier, found {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+            }
+
+            const structFieldName = self.getAndConsume(.Identifier).value;
+
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Operator and self.getToken(.Operator).value != .Declaration) {
+                std.debug.panic("Expected declaration operator, found {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+            }
+
+            self.consumeToken(.Operator);
+
+            const structFieldType = self.parseType();
+            const afterFieldToken = self.lexer.tokens[self.lexer.nextIdx];
+
+            if (afterFieldToken != .Sign) {
+                std.debug.panic("Expected comma or right brace, found {any}", .{afterFieldToken});
+            }
+
+            fieldNames.append(structFieldName) catch unreachable;
+            fieldTypes.append(structFieldType) catch unreachable;
+
+            const afterFieldSign = self.getAndConsume(.Sign).value;
+
+            if (afterFieldSign == '}') break else if (afterFieldSign != ',') {
+                std.debug.panic("Expected comma or right brace, found {any}", .{afterFieldSign});
+            }
+        }
+
+        const structDeclaration = Type.Struct{
+            .types = fieldTypes.items,
+            .names = fieldNames.items,
+            .name = name,
+            .alignment = 0,
+        };
+
+        const structIdx = self.moduleBuilder.structTypes.items.len;
+        self.moduleBuilder.structTypes.append(structDeclaration) catch unreachable;
+        return Type.Struct.new(structIdx, self.moduleBuilder.idx);
+    }
     pub fn parseScope(self: *Self, parentExpr: Entity) u32 {
         const prevScope = self.fnBuilder.currentScope;
         const newScope = Parser.Scope.new(self.allocator, &self.fnBuilder, parentExpr, prevScope);
