@@ -26,7 +26,7 @@ pub const ParserEngine = struct {
         nextIdx: u64,
         counters: countersType,
         tokens: []Lexer.Token,
-        intLiterals: []Lexer.IntegerLiteral,
+        intLiterals: []Lexer.IntLiteral,
         charLiterals: []Lexer.CharLiteral,
         stringLiterals: []Lexer.StringLiteral,
         identifiers: []Lexer.Identifier,
