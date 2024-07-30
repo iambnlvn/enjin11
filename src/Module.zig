@@ -24,7 +24,7 @@ pub const Module = struct {
         intLiterals: ArrayList(Parser.IntegerLiteral),
         structLiterals: ArrayList(Parser.StructLiteral),
         arrayLiterals: ArrayList(Parser.ArrayLiteral),
-        unresolvedTypes: ArrayList(Type.UnresolvedType),
+        unresolvedTypes: ArrayList([]const u8),
         sliceTypes: ArrayList(Type.Slice),
         fnTypes: ArrayList(Type.Function),
         arrayTypes: ArrayList(Type.Array),
