@@ -381,6 +381,10 @@ pub const Lib = struct {
         symbolNames: ArrayList([]const u8),
     };
 };
+pub const ImportedModule = struct {
+    module: Entity,
+    alias: ?[]const u8,
+};
 
 pub const TokenTypeMap = blk: {
     var ttm: [std.enums.values(Lexer.Token).len]type = undefined;
