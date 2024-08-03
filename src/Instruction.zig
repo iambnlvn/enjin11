@@ -2,6 +2,7 @@ const Ref = @import("IR.zig").Ref;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Ir = @import("IR.zig");
+const ArrayList = std.ArrayList;
 
 pub const Instruction = struct {
     pub fn getId(reference: Ref) ID {
@@ -9,8 +10,9 @@ pub const Instruction = struct {
     }
 
     pub fn new(allocator: *Allocator, builder: *Ir.Program.Builder, id: ID, index: u64) Ref {
-        // at this point I dont know how to implement this function
-        //paper time I guess
+        builder.instructionReferences[@enumFromInt(id)].append(ArrayList(Ref).init(allocator)) catch unreachable;
+
+        return .{ .value = (@as(u64, @intFromEnum(Ref.ID.Instruction)) << Ref.ID.position) | (@as(u64, @intFromEnum(id)) << Instruction.ID.position) | index };
     }
 
     pub const ID = enum(u8) {
@@ -36,6 +38,7 @@ pub const Instruction = struct {
             const arrayIdx = list.items.len;
             list.append(Instruction.Add{ .left = left, .right = right }) catch unreachable;
             const instruction = Instruction.new(allocator, builder, .add, arrayIdx);
+
             // ? I'm just free-styling here
         }
     };
