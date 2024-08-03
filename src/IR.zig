@@ -6,6 +6,7 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Instruction = @import("Instruction.zig").Instruction;
 const Semantics = @import("Sem.zig");
+
 pub const Constant = struct {
     pub const ID = enum(u8) {
         Array,
@@ -54,7 +55,7 @@ pub const Ref = struct {
         Operator,
         ExternalFunc,
 
-        const position = @bitSizeOf(T) - @bitSizeOf(ID);
+        pub const position = @bitSizeOf(T) - @bitSizeOf(ID);
     };
     const LLVMID = LLVM.ID;
 
@@ -129,18 +130,41 @@ pub const ExternalFunc = struct {
     }
 };
 
+const BasicBlock = struct {
+    instructions: ArrayList(Ref),
+    refs: ArrayList(Ref),
+    fnIdx: u32,
+
+    fn new(allocator: *Allocator, builder: *Program.Builder) u32 {
+        builder.basicBlocks.append(.{
+            .instructions = ArrayList(Ref).init(allocator),
+            .refs = ArrayList(Ref).init(allocator),
+            .fnIdx = 0,
+        }) catch unreachable;
+        return @as(u32, @intCast(builder.basicBlocks.items.len));
+    }
+
+    fn getRef(idx: u32) Ref {
+        return .{ .value = (@as(u64, @intFromEnum(Ref.ID.BasicBlock)) << Ref.ID.position) | idx };
+    }
+};
+
+pub const refList = ArrayList(Ref);
 pub const Program = struct {
     instructions: struct {
         // add: []Instruction.Add,
         // Todo: add more instructions
     },
     functions: []Function,
-    arrayLiterals: Parser.ArrayLiteral,
-    structLiterals: []Parser.StructLiteral,
-    functionTypes: Type.Function,
-    arrayTypes: Type.Array,
-    structTypes: Type.Struct,
+
+    functionTypes: []Type.Function,
+    arrayTypes: []Type.Array,
+    structTypes: []Type.Struct,
     integerLiterals: []Parser.IntegerLiteral,
+    instructionReferences: [Instruction.count][]refList,
+    arrayLiterals: []Parser.ArrayLiteral,
+    structLiterals: []Parser.StructLiteral,
+    external: Semantics.External,
 
     pub const Builder = struct {
         const Self = @This();
@@ -148,37 +172,68 @@ pub const Program = struct {
             add: ArrayList(Instruction.Add),
         },
 
-        functions: ArrayList(Function),
         external: Semantics.External,
         functionBuilders: ArrayList(Function.Builder),
         arrayLiterals: ArrayList(Parser.ArrayLiteral),
         structLiterals: ArrayList(Parser.StructLiteral),
+
+        integerLiterals: ArrayList(Parser.IntegerLiteral),
+        integerLiteralReferences: [Instruction.count][]refList,
+        instructionReferences: [Instruction.count]ArrayList(refList),
         functionTypes: ArrayList(Type.Function),
         arrayTypes: ArrayList(Type.Array),
         structTypes: ArrayList(Type.Array),
-        integerLiterals: ArrayList(Parser.IntegerLiteral),
+        sliceTypes: ArrayList(Type.Slice),
+        basicBlocks: ArrayList(BasicBlock),
         currentFunction: u32,
 
         fn new(allocator: *Allocator, result: Semantics.Result) Self {
             var builder = Builder{
-                .Instructions = .{
+                .instructions = .{
                     .add = ArrayList(Instruction.Add).init(allocator),
                 },
+
+                .instructionRefrences = blk: {
+                    var insRef: [Instruction.count]ArrayList(refList) = undefined;
+                    std.mem.set(ArrayList(refList), insRef[0..], ArrayList(refList).init(allocator));
+                    break :blk insRef;
+                },
+
                 .external = result.external,
-                //todo: imlement semantics for the rest of the fields
-                // .functions = ArrayList(Function).initCapacity(allocator, result.functions.len) catch unreachable,
-                // .functionBuilders = ArrayList(Function.Builder).initCapacity(allocator, result.functions.len) catch unreachable,
+                .functionBuilders = ArrayList(Function.Builder).initCapacity(allocator, result.functions.len) catch unreachable,
                 .arrayLiterals = ArrayList(Parser.ArrayLiteral).init(allocator),
                 .structLiterals = ArrayList(Parser.StructLiteral).init(allocator),
                 .functionTypes = ArrayList(Type.Function).init(allocator),
                 .arrayTypes = ArrayList(Type.Array).init(allocator),
                 .structTypes = ArrayList(Type.Struct).init(allocator),
+                .sliceTypes = ArrayList(Type.Slice).init(allocator),
                 .integerLiterals = ArrayList(Parser.IntegerLiteral).init(allocator),
+                .integerLiteralReferences = ArrayList(refList).initCapacity(allocator, result.integerLiterals.len) catch unreachable,
                 .currentFunction = 0,
             };
+
             builder.functionBuilders.items.len = result.functions.len;
 
-            //loop over the result's function ast and build using a functionBuilder
+            for (result.functions, 0..) |*fnAst, fnIdx| {
+                var fnBuilder = &builder.functionBuilders.items[fnIdx];
+                fnBuilder.* = Function.Builder.new(allocator, fnAst);
+            }
+
+            builder.integerLiterals.appendSlice(result.integerLiterals) catch unreachable;
+            builder.integerLiteralReferences.items.len = result.integerLiterals.len;
+            builder.arrayLiterals.appendSlice(result.arrayLiterals) catch unreachable;
+            builder.structLiterals.appendSlice(result.structLiterals) catch unreachable;
+
+            for (builder.integerLiteralReferences.items) |*ref| {
+                ref.* = refList.init(allocator);
+            }
+
+            builder.arrayTypes.appendSlice(result.arrayTypes) catch unreachable;
+            builder.structTypes.appendSlice(result.structTypes) catch unreachable;
+            builder.sliceTypes.appendSlice(result.sliceTypes) catch unreachable;
+            builder.functionTypes.appendSlice(result.functionTypes) catch unreachable;
+
+            return builder;
         }
     };
 };
