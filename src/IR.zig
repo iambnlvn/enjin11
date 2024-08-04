@@ -174,6 +174,8 @@ pub const Program = struct {
             add: ArrayList(Instruction.Add),
             sub: ArrayList(Instruction.Sub),
             mul: ArrayList(Instruction.Mul),
+            load: ArrayList(Instruction.Load),
+            store: ArrayList(Instruction.Store),
         },
 
         external: Semantics.External,
@@ -197,6 +199,8 @@ pub const Program = struct {
                     .add = ArrayList(Instruction.Add).init(allocator),
                     .sub = ArrayList(Instruction.Sub).init(allocator),
                     .mul = ArrayList(Instruction.Mul).init(allocator),
+                    .load = ArrayList(Instruction.Load).init(allocator),
+                    .store = ArrayList(Instruction.Store).init(allocator),
                 },
 
                 .instructionRefrences = blk: {

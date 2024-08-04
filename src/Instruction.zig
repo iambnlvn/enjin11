@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Ir = @import("IR.zig");
 const ArrayList = std.ArrayList;
-
+const Type = @import("Type.zig").Type;
 pub const Instruction = struct {
     pub fn getId(reference: Ref) ID {
         return @as(ID, @enumFromInt(@as(u8, @intCast((reference.value & (std.math.maxInt(std.meta.Int(.unsigned, @bitSizeOf(ID))) << ID.position)) >> ID.position))));
@@ -71,6 +71,40 @@ pub const Instruction = struct {
             builder.appendRef(left, instruction);
             builder.appendRef(right, instruction);
             return builder.appendInstruction2fn(instruction);
+        }
+    };
+
+    pub const Load = struct {
+        type: Type,
+        pointer: Ref,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, loadType: Type, loadValue: Ref) Ref {
+            const loadInstruction = Instruction.new(allocator, builder, .load, builder.instructions.load.items.len);
+            builder.instructions.load.append(Instruction.Load{
+                .type = loadType,
+                .pointer = loadValue,
+            }) catch unreachable;
+            builder.appendRef(loadValue, loadInstruction);
+            return builder.appendInstruction2fn(loadInstruction);
+        }
+    };
+
+    pub const Store = struct {
+        value: Ref,
+        pointer: Ref,
+        type: Type,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, value: Ref, pointer: Ref, storeType: Type) Ref {
+            builder.instructions.store.append(.{
+                .value = value,
+                .pointer = pointer,
+                .type = storeType,
+            }) catch unreachable;
+
+            const storeInstruction = Instruction.new(allocator, builder, .store, builder.instructions.store.items.len);
+            builder.appendRef(pointer, storeInstruction);
+            builder.appendRef(value, storeInstruction);
+            return builder.appendInstruction2fn(storeInstruction);
         }
     };
 };
