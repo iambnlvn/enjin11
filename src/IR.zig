@@ -153,8 +153,9 @@ const BasicBlock = struct {
 pub const refList = ArrayList(Ref);
 pub const Program = struct {
     instructions: struct {
-        // add: []Instruction.Add,
-        // Todo: add more instructions
+        add: []Instruction.Add,
+        sub: []Instruction.Sub,
+        mul: []Instruction.Mul,
     },
     functions: []Function,
 
@@ -171,6 +172,8 @@ pub const Program = struct {
         const Self = @This();
         instructions: struct {
             add: ArrayList(Instruction.Add),
+            sub: ArrayList(Instruction.Sub),
+            mul: ArrayList(Instruction.Mul),
         },
 
         external: Semantics.External,
@@ -192,6 +195,8 @@ pub const Program = struct {
             var builder = Builder{
                 .instructions = .{
                     .add = ArrayList(Instruction.Add).init(allocator),
+                    .sub = ArrayList(Instruction.Sub).init(allocator),
+                    .mul = ArrayList(Instruction.Mul).init(allocator),
                 },
 
                 .instructionRefrences = blk: {

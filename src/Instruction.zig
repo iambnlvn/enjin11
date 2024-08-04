@@ -43,4 +43,34 @@ pub const Instruction = struct {
             return builder.appendInstruction2fn(instruction);
         }
     };
+
+    pub const Sub = struct {
+        left: Ref,
+        right: Ref,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, left: Ref, right: Ref) Ref {
+            var list = &builder.instructions.sub;
+            const arrayIdx = list.items.len;
+            list.append(Instruction.Add{ .left = left, .right = right }) catch unreachable;
+            const instruction = Instruction.new(allocator, builder, .sub, arrayIdx);
+            builder.appendRef(left, instruction);
+            builder.appendRef(right, instruction);
+            return builder.appendInstruction2fn(instruction);
+        }
+    };
+
+    pub const Mul = struct {
+        left: Ref,
+        right: Ref,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, left: Ref, right: Ref) Ref {
+            var list = &builder.instructions.mul;
+            const arrayIdx = list.items.len;
+            list.append(Instruction.Add{ .left = left, .right = right }) catch unreachable;
+            const instruction = Instruction.new(allocator, builder, .mul, arrayIdx);
+            builder.appendRef(left, instruction);
+            builder.appendRef(right, instruction);
+            return builder.appendInstruction2fn(instruction);
+        }
+    };
 };
