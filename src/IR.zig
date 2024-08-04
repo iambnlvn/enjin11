@@ -83,6 +83,7 @@ pub const Function = struct {
         argAlloca: ArrayList(Ref),
         returnAlloca: Ref,
         currentBlock: u32,
+        refs: refList,
         nextAllocationIdx: u32,
         exitBlock: u32,
         scope2BasicBlockMap: ArrayList(u32),
@@ -234,6 +235,40 @@ pub const Program = struct {
             builder.functionTypes.appendSlice(result.functionTypes) catch unreachable;
 
             return builder;
+        }
+
+        pub fn appendRef(self: *Self, value: Ref, refrence: Ref) void {
+            switch (value.getId()) {
+                .Constant => {
+                    switch (Constant.getId(value)) {
+                        .Int => {
+                            self.integerLiteralReferences[value.getIDX()].append(refrence) catch unreachable;
+                        },
+                        .Array => {
+                            self.arrayLiterals[value.getIDX()].refs.append(refrence) catch unreachable;
+                        },
+                        .@"struct" => {
+                            self.structLiterals[value.getIDX()].refs.append(refrence) catch unreachable;
+                        },
+                        else => std.debug.panic("Unsupported constant type"),
+                    }
+                },
+                .Instruction => {
+                    self.instructionReferences[@intFromEnum(Instruction.getId(value))].items[value.getIDX()].append(refrence) catch unreachable;
+                },
+                .GlobalFunc => {
+                    self.functionBuilders.items[value.getIDX()].refs.append(refrence) catch unreachable;
+                },
+                // todo: add more cases
+                else => std.debug.panic("Unsupported ref type"),
+            }
+        }
+
+        pub fn appendInstruction2fn(self: *Program.Builder, instruction: Ref) Ref {
+            const blockIdx = self.functionBuilders.items[self.currentFunction].currentBlock;
+            const currentBlock = &self.basicBlocks.items[blockIdx];
+            currentBlock.instructions.append(instruction) catch unreachable;
+            return instruction;
         }
     };
 };
