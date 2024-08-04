@@ -38,8 +38,9 @@ pub const Instruction = struct {
             const arrayIdx = list.items.len;
             list.append(Instruction.Add{ .left = left, .right = right }) catch unreachable;
             const instruction = Instruction.new(allocator, builder, .add, arrayIdx);
-
-            // ? I'm just free-styling here
+            builder.appendRef(left, instruction);
+            builder.appendRef(right, instruction);
+            return builder.appendInstruction2fn(instruction);
         }
     };
 };
