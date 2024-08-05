@@ -188,6 +188,7 @@ pub const Program = struct {
             store: ArrayList(Instruction.Store),
             memCopy: ArrayList(Instruction.MemCopy),
             call: ArrayList(Instruction.Call),
+            ret: ArrayList(Instruction.Ret),
         },
 
         external: Semantics.External,
@@ -215,6 +216,7 @@ pub const Program = struct {
                     .store = ArrayList(Instruction.Store).init(allocator),
                     .memCopy = ArrayList(Instruction.MemCopy).init(allocator),
                     .call = ArrayList(Instruction.Call).init(allocator),
+                    .ret = ArrayList(Instruction.Ret).init(allocator),
                 },
 
                 .instructionRefrences = blk: {

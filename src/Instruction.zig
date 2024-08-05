@@ -28,6 +28,7 @@ pub const Instruction = struct {
         frem,
         memCopy,
         call,
+        ret,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
@@ -147,6 +148,40 @@ pub const Instruction = struct {
             }
 
             return builder.appendInstruction2fn(instruction);
+        }
+    };
+
+    pub const Ret = struct {
+        type: Type,
+        value: Ref,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, returnType: Type, returnValue: ?Ref) Ref {
+            const currentBlock = builder.getCurrentBasicBlock();
+
+            if (!currentBlock.isTerminated) {
+                const instruction = Instruction.new(allocator, builder, .ret, builder.instructions.ret.items.len);
+
+                const ret = retBlk: {
+                    if (returnValue) |value| {
+                        builder.appendRef(value, instruction);
+                        break :retBlk Ret{
+                            .type = returnType,
+                            .value = value,
+                        };
+                    } else {
+                        break :retBlk Ret{
+                            .type = returnType,
+                            .value = Ref.Null,
+                        };
+                    }
+                };
+
+                builder.instructions.ret.append(ret) catch unreachable;
+                return builder.appendInstruction2fn(instruction);
+            } else {
+                std.debug.panic("return is not allowed in terminated basic blocks", .{});
+                // should prolly return undefined
+            }
         }
     };
 };
