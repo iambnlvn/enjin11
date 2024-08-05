@@ -5,6 +5,8 @@ const Ir = @import("IR.zig");
 const ArrayList = std.ArrayList;
 const Type = @import("Type.zig").Type;
 pub const Instruction = struct {
+    pub const count = @intFromEnum(ID.memCopy) + 1;
+
     pub fn getId(reference: Ref) ID {
         return @as(ID, @enumFromInt(@as(u8, @intCast((reference.value & (std.math.maxInt(std.meta.Int(.unsigned, @bitSizeOf(ID))) << ID.position)) >> ID.position))));
     }
@@ -29,6 +31,7 @@ pub const Instruction = struct {
         memCopy,
         call,
         ret,
+        br,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
@@ -181,6 +184,54 @@ pub const Instruction = struct {
             } else {
                 std.debug.panic("return is not allowed in terminated basic blocks", .{});
                 // should prolly return undefined
+            }
+        }
+    };
+
+    pub const Br = struct {
+        condition: ?Ref,
+        destBasicBlock: u32,
+        falsyDestBlock: ?u32,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, destBasicBlock: u32) void {
+            const currentBlock = builder.functionBuilders.items[builder.currentFunction].currentBlock;
+
+            if (!currentBlock.isTerminated) {
+                var list = &builder.instructions.br;
+                list.append(.{
+                    .condition = null,
+                    .destBasicBlock = destBasicBlock,
+                    .falsyDestBlock = null,
+                }) catch unreachable;
+
+                const instruction = Instruction.new(allocator, builder, .br, builder.instructions.br);
+                builder.basicBlocks.items[destBasicBlock].refs.append(instruction) catch unreachable;
+                builder.appendInstruction2fn(instruction);
+            } else {
+                std.debug.panic("branch is not allowed in terminated basic blocks", .{});
+            }
+        }
+
+        fn newConditional(allocator: *Allocator, builder: *Ir.Program.Builder, condition: Ref, destBasicBlock: u32, falsyDestBlock: u32) void {
+            const currentBlock = builder.functionBuilders.items[builder.currentFunction].currentBlock;
+
+            if (!currentBlock.isTerminated) {
+                var list = &builder.instructions.br;
+                list.append(.{
+                    .condition = condition,
+                    .destBasicBlock = destBasicBlock,
+                    .falsyDestBlock = falsyDestBlock,
+                }) catch unreachable;
+
+                const instruction = Instruction.new(allocator, builder, .br, list.items.len);
+
+                builder.appendRef(condition, instruction);
+
+                builder.basicBlocks.items[destBasicBlock].refs.append(instruction) catch unreachable;
+                builder.basicBlocks.items[falsyDestBlock].refs.append(instruction) catch unreachable;
+                builder.appendInstruction2fn(instruction);
+            } else {
+                std.debug.panic("branch is not allowed in terminated basic blocks", .{});
             }
         }
     };

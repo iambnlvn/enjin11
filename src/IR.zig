@@ -77,7 +77,7 @@ pub const Function = struct {
         return .{ .value = (@as(u64, @intFromEnum(Ref.ID.GlobalFunc)) << Ref.ID.position) | idx };
     }
 
-    const Builder = struct {
+    pub const Builder = struct {
         declaration: Parser.Function,
         basicBlocs: ArrayList(u32),
         argAlloca: ArrayList(Ref),
@@ -131,7 +131,7 @@ pub const ExternalFunc = struct {
     }
 };
 
-const BasicBlock = struct {
+pub const BasicBlock = struct {
     instructions: ArrayList(Ref),
     refs: ArrayList(Ref),
     fnIdx: u32,
@@ -166,6 +166,12 @@ pub const Program = struct {
         add: []Instruction.Add,
         sub: []Instruction.Sub,
         mul: []Instruction.Mul,
+        load: []Instruction.Load,
+        store: []Instruction.Store,
+        memCopy: []Instruction.MemCopy,
+        call: []Instruction.Call,
+        ret: []Instruction.Ret,
+        br: []Instruction.Br,
     },
     functions: []Function,
 
@@ -189,6 +195,7 @@ pub const Program = struct {
             memCopy: ArrayList(Instruction.MemCopy),
             call: ArrayList(Instruction.Call),
             ret: ArrayList(Instruction.Ret),
+            br: ArrayList(Instruction.Br),
         },
 
         external: Semantics.External,
