@@ -27,6 +27,7 @@ pub const Instruction = struct {
         srem,
         frem,
         memCopy,
+        call,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
@@ -123,6 +124,29 @@ pub const Instruction = struct {
             builder.appendRef(src, instruction);
 
             builder.appendInstruction2fn(instruction);
+        }
+    };
+
+    pub const Call = struct {
+        type: Type,
+        callee: Ref,
+        args: []Ref,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, returnType: Type, callee: Ref, args: []Ref) Ref {
+            builder.instructions.call.append(.{
+                .type = returnType,
+                .callee = callee,
+                .args = args,
+            }) catch unreachable;
+
+            const instruction = Instruction.new(allocator, builder, .call, builder.instructions.call.items.len);
+            builder.appendRef(callee, instruction);
+
+            for (args) |arg| {
+                builder.appendRef(arg, instruction);
+            }
+
+            return builder.appendInstruction2fn(instruction);
         }
     };
 };

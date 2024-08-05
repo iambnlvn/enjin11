@@ -177,6 +177,7 @@ pub const Program = struct {
             load: ArrayList(Instruction.Load),
             store: ArrayList(Instruction.Store),
             memCopy: ArrayList(Instruction.MemCopy),
+            call: ArrayList(Instruction.Call),
         },
 
         external: Semantics.External,
@@ -203,6 +204,7 @@ pub const Program = struct {
                     .load = ArrayList(Instruction.Load).init(allocator),
                     .store = ArrayList(Instruction.Store).init(allocator),
                     .memCopy = ArrayList(Instruction.MemCopy).init(allocator),
+                    .call = ArrayList(Instruction.Call).init(allocator),
                 },
 
                 .instructionRefrences = blk: {
