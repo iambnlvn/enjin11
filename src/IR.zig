@@ -176,6 +176,7 @@ pub const Program = struct {
             mul: ArrayList(Instruction.Mul),
             load: ArrayList(Instruction.Load),
             store: ArrayList(Instruction.Store),
+            memCopy: ArrayList(Instruction.MemCopy),
         },
 
         external: Semantics.External,
@@ -201,6 +202,7 @@ pub const Program = struct {
                     .mul = ArrayList(Instruction.Mul).init(allocator),
                     .load = ArrayList(Instruction.Load).init(allocator),
                     .store = ArrayList(Instruction.Store).init(allocator),
+                    .memCopy = ArrayList(Instruction.MemCopy).init(allocator),
                 },
 
                 .instructionRefrences = blk: {
@@ -225,7 +227,7 @@ pub const Program = struct {
             builder.functionBuilders.items.len = result.functions.len;
 
             for (result.functions, 0..) |*fnAst, fnIdx| {
-                var fnBuilder = &builder.functionBuilders.items[fnIdx];
+                const fnBuilder = &builder.functionBuilders.items[fnIdx];
                 fnBuilder.* = Function.Builder.new(allocator, fnAst);
             }
 
