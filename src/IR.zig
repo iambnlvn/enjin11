@@ -148,6 +148,16 @@ const BasicBlock = struct {
     fn getRef(idx: u32) Ref {
         return .{ .value = (@as(u64, @intFromEnum(Ref.ID.BasicBlock)) << Ref.ID.position) | idx };
     }
+
+    pub fn isTerminated(self: *const BasicBlock) bool {
+        if (self.instructions.items.len > 0) {
+            const lastInstructionId = Instruction.getId(self.instructions.items[self.instructions.items.len - 1]);
+
+            // break also should be imply a terminated block
+            if (lastInstructionId == .ret) return true;
+        }
+        return false;
+    }
 };
 
 pub const refList = ArrayList(Ref);
@@ -282,6 +292,10 @@ pub const Program = struct {
             const currentBlock = &self.basicBlocks.items[blockIdx];
             currentBlock.instructions.append(instruction) catch unreachable;
             return instruction;
+        }
+
+        pub fn getCurrentBasicBlock(self: *Builder) *BasicBlock {
+            return &self.basicBlocks.items[self.functionBuilders.items[self.currentFunction].currentBlock];
         }
     };
 };
