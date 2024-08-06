@@ -154,7 +154,8 @@ pub const BasicBlock = struct {
             const lastInstructionId = Instruction.getId(self.instructions.items[self.instructions.items.len - 1]);
 
             // break also should be imply a terminated block
-            if (lastInstructionId == .ret) return true;
+            // I think a branch should be considered as a terminated block
+            if (lastInstructionId == .ret or lastInstructionId == .br) return true;
         }
         return false;
     }
@@ -172,6 +173,7 @@ pub const Program = struct {
         call: []Instruction.Call,
         ret: []Instruction.Ret,
         br: []Instruction.Br,
+        icmp: []Instruction.Icmp,
     },
     functions: []Function,
 
@@ -186,17 +188,7 @@ pub const Program = struct {
 
     pub const Builder = struct {
         const Self = @This();
-        instructions: struct {
-            add: ArrayList(Instruction.Add),
-            sub: ArrayList(Instruction.Sub),
-            mul: ArrayList(Instruction.Mul),
-            load: ArrayList(Instruction.Load),
-            store: ArrayList(Instruction.Store),
-            memCopy: ArrayList(Instruction.MemCopy),
-            call: ArrayList(Instruction.Call),
-            ret: ArrayList(Instruction.Ret),
-            br: ArrayList(Instruction.Br),
-        },
+        instructions: struct { add: ArrayList(Instruction.Add), sub: ArrayList(Instruction.Sub), mul: ArrayList(Instruction.Mul), load: ArrayList(Instruction.Load), store: ArrayList(Instruction.Store), memCopy: ArrayList(Instruction.MemCopy), call: ArrayList(Instruction.Call), ret: ArrayList(Instruction.Ret), br: ArrayList(Instruction.Br), icmp: ArrayList(Instruction.Icmp) },
 
         external: Semantics.External,
         functionBuilders: ArrayList(Function.Builder),
@@ -224,6 +216,7 @@ pub const Program = struct {
                     .memCopy = ArrayList(Instruction.MemCopy).init(allocator),
                     .call = ArrayList(Instruction.Call).init(allocator),
                     .ret = ArrayList(Instruction.Ret).init(allocator),
+                    .icmp = ArrayList(Instruction.Icmp).init(allocator),
                 },
 
                 .instructionRefrences = blk: {

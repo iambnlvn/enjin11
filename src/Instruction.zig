@@ -32,6 +32,7 @@ pub const Instruction = struct {
         call,
         ret,
         br,
+        icmp,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
@@ -233,6 +234,39 @@ pub const Instruction = struct {
             } else {
                 std.debug.panic("branch is not allowed in terminated basic blocks", .{});
             }
+        }
+    };
+
+    pub const Icmp = struct {
+        left: Ref,
+        right: Ref,
+        id: Icmp.Id,
+
+        pub const Id = enum(u8) {
+            eq = 0,
+            ne,
+            ugt,
+            uge,
+            ult,
+            ule,
+            sgt,
+            sge,
+            slt,
+            sle,
+        };
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, id: Id, left: Ref, right: Ref) Ref {
+            var list = &builder.instructions.icmp;
+            list.append(.{
+                .left = left,
+                .right = right,
+                .id = id,
+            }) catch unreachable;
+
+            const instruction = Instruction.new(allocator, builder, .icmp, list.items.len);
+            builder.appendRef(left, instruction);
+            builder.appendRef(right, instruction);
+            return builder.appendInstruction2fn(instruction);
         }
     };
 };
