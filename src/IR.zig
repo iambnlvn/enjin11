@@ -174,6 +174,7 @@ pub const Program = struct {
         ret: []Instruction.Ret,
         br: []Instruction.Br,
         icmp: []Instruction.Icmp,
+        alloc: []Instruction.Alloc,
     },
     functions: []Function,
 
@@ -185,16 +186,30 @@ pub const Program = struct {
     arrayLiterals: []Parser.ArrayLiteral,
     structLiterals: []Parser.StructLiteral,
     external: Semantics.External,
+    basicBlocks: []BasicBlock,
+    pointerTypes: []Type.Pointer,
 
     pub const Builder = struct {
         const Self = @This();
-        instructions: struct { add: ArrayList(Instruction.Add), sub: ArrayList(Instruction.Sub), mul: ArrayList(Instruction.Mul), load: ArrayList(Instruction.Load), store: ArrayList(Instruction.Store), memCopy: ArrayList(Instruction.MemCopy), call: ArrayList(Instruction.Call), ret: ArrayList(Instruction.Ret), br: ArrayList(Instruction.Br), icmp: ArrayList(Instruction.Icmp) },
+        instructions: struct {
+            add: ArrayList(Instruction.Add),
+            sub: ArrayList(Instruction.Sub),
+            mul: ArrayList(Instruction.Mul),
+            load: ArrayList(Instruction.Load),
+            store: ArrayList(Instruction.Store),
+            memCopy: ArrayList(Instruction.MemCopy),
+            call: ArrayList(Instruction.Call),
+            ret: ArrayList(Instruction.Ret),
+            br: ArrayList(Instruction.Br),
+            icmp: ArrayList(Instruction.Icmp),
+            alloc: ArrayList(Instruction.Alloc),
+        },
 
         external: Semantics.External,
         functionBuilders: ArrayList(Function.Builder),
         arrayLiterals: ArrayList(Parser.ArrayLiteral),
         structLiterals: ArrayList(Parser.StructLiteral),
-
+        pointerTypes: ArrayList(Type.Pointer),
         integerLiterals: ArrayList(Parser.IntegerLiteral),
         integerLiteralReferences: [Instruction.count][]refList,
         instructionReferences: [Instruction.count]ArrayList(refList),
@@ -217,6 +232,7 @@ pub const Program = struct {
                     .call = ArrayList(Instruction.Call).init(allocator),
                     .ret = ArrayList(Instruction.Ret).init(allocator),
                     .icmp = ArrayList(Instruction.Icmp).init(allocator),
+                    .alloc = ArrayList(Instruction.Alloc).init(allocator),
                 },
 
                 .instructionRefrences = blk: {
@@ -226,6 +242,8 @@ pub const Program = struct {
                 },
 
                 .external = result.external,
+                .basicBlocks = ArrayList(BasicBlock).init(allocator),
+                .pointerTypes = ArrayList(Type.Pointer).init(allocator),
                 .functionBuilders = ArrayList(Function.Builder).initCapacity(allocator, result.functions.len) catch unreachable,
                 .arrayLiterals = ArrayList(Parser.ArrayLiteral).init(allocator),
                 .structLiterals = ArrayList(Parser.StructLiteral).init(allocator),
@@ -298,6 +316,14 @@ pub const Program = struct {
 
         pub fn getCurrentBasicBlock(self: *Builder) *BasicBlock {
             return &self.basicBlocks.items[self.functionBuilders.items[self.currentFunction].currentBlock];
+        }
+
+        pub fn getOrCreatePtrType(self: *Self, ptrType: Type) Type {
+            const ptrT = Type.Pointer.new(self.pointerTypes.items.len, 0);
+            self.pointerTypes.append(.{
+                .type = ptrType,
+            }) catch unreachable;
+            return ptrT;
         }
     };
 };

@@ -33,6 +33,7 @@ pub const Instruction = struct {
         ret,
         br,
         icmp,
+        alloc,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
@@ -267,6 +268,29 @@ pub const Instruction = struct {
             builder.appendRef(left, instruction);
             builder.appendRef(right, instruction);
             return builder.appendInstruction2fn(instruction);
+        }
+    };
+
+    pub const Alloc = struct {
+        ptrType: Type,
+        baseType: Type,
+        ref: Ref,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, refrence: Ref, allocType: Type, arraySize: ?*Ref) void {
+            // assert that the arraySize is a null
+            _ = arraySize;
+            builder.instructions.alloc.append(.{
+                .ptrType = builder.getOrCreatePtrType(allocType),
+                .baseType = allocType,
+                .ref = refrence,
+            }) catch unreachable;
+            const instruction = Instruction.new(allocator, builder, .alloc, builder.instructions.alloc.items.len);
+            var fnBuilder = &builder.functionBuilders.items[builder.currentFunction];
+            const entryIdx = fnBuilder.basicBlocs.items[0];
+
+            builder.basicBlocks.items[entryIdx].instructions.insert(fnBuilder.nextAllocationIdx, instruction) catch unreachable;
+            fnBuilder.nextAllocationIdx += 1;
+            return instruction;
         }
     };
 };
