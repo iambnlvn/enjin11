@@ -6,6 +6,8 @@ const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Instruction = @import("Instruction.zig").Instruction;
 const Semantics = @import("Sem.zig");
+const Entity = @import("Entity.zig").Entity;
+const Level = @import("EntityID.zig").ID;
 
 pub const Constant = struct {
     pub const ID = enum(u8) {
@@ -324,6 +326,45 @@ pub const Program = struct {
                 .type = ptrType,
             }) catch unreachable;
             return ptrT;
+        }
+        pub fn processExpr(self: *Self, allocator: *Allocator, fnBuilder: *Function.Builder, res: Semantics.Result, ast: Entity) Ref {
+            const astLevel = ast.getLevel();
+            switch (astLevel) {
+                .global => {
+                    const globalExprId = ast.getArrayId(Level.Global);
+                    switch (globalExprId) {
+                        .ResolvedExternalFn => {
+                            unreachable;
+                        },
+                        else => std.debug.panic("Unsupported global expression"),
+                    }
+                },
+                .scope => {
+                    const scopeIdx = ast.getArrayIndex();
+                    const exprIdx = ast.getIdx();
+                    const exprId = ast.getArrayId(Level.Scope);
+                    switch (exprId) {
+                        .IntegerLiterals => {
+                            return Constant.new(Constant.ID.Int, exprIdx);
+                        },
+                        .Args => {
+                            const argIdx = exprIdx;
+                            const allocRef = fnBuilder.argAlloca.items[exprIdx];
+                            const argType = fnBuilder.declaration.type.argTypes[argIdx];
+                            return Instruction.Load.new(allocator, self, argType, allocRef);
+                        },
+                        .ArrayLiterals => {
+                            return Constant.new(.Array, exprIdx);
+                        },
+                        .StructLiterals => {
+                            return Constant.new(.@"struct", exprIdx);
+                        },
+                        //todo: add more cases
+                        else => std.debug.panic("Unsupported scope expression"),
+                    }
+                },
+                else => std.debug.panic("Unsupported expression level"),
+            }
         }
     };
 };
