@@ -345,26 +345,71 @@ pub const Program = struct {
                     const exprId = ast.getArrayId(Level.Scope);
                     switch (exprId) {
                         .IntegerLiterals => {
-                            return Constant.new(Constant.ID.Int, exprIdx);
+                            return Constant.new(.Int, exprIdx);
                         },
+
                         .Args => {
                             const argIdx = exprIdx;
                             const allocRef = fnBuilder.argAlloca.items[exprIdx];
                             const argType = fnBuilder.declaration.type.argTypes[argIdx];
                             return Instruction.Load.new(allocator, self, argType, allocRef);
                         },
+
                         .ArrayLiterals => {
                             return Constant.new(.Array, exprIdx);
                         },
+
                         .StructLiterals => {
                             return Constant.new(.@"struct", exprIdx);
                         },
+
+                        .VarDeclaration => {
+                            const allocRef = self.findExprAlloc(fnBuilder, ast);
+                            const alloc = self.instructions.alloc.items[allocRef.getIDX()];
+
+                            return Instruction.Load.new(allocator, self, alloc.baseType, allocRef);
+                        },
+
+                        .ArithmeticExpr => {
+                            const arithmeticExpr = &res.functions[self.currentFunction].scopes[scopeIdx].ArithmeticExpr[exprIdx];
+
+                            const lhs = self.processExpr(allocator, fnBuilder, res, arithmeticExpr.left);
+                            const rhs = self.processExpr(allocator, fnBuilder, res, arithmeticExpr.right);
+
+                            return switch (arithmeticExpr.id) {
+                                .Add => Instruction.Add.new(allocator, self, lhs, rhs),
+                                .Sub => Instruction.Sub.new(allocator, self, lhs, rhs),
+                                .Mul => Instruction.Mul.new(allocator, self, lhs, rhs),
+                                //Todo: Implement the rest of the arithmetic expressions
+                                // .Div => Instruction.Div.new(allocator, self, lhs, rhs),
+                                // .Mod => Instruction.Mod.new(allocator, self, lhs, rhs),
+                                else => std.debug.panic("Unsupported arithmetic expression"),
+                            };
+                        },
+
                         //todo: add more cases
                         else => std.debug.panic("Unsupported scope expression"),
                     }
                 },
                 else => std.debug.panic("Unsupported expression level"),
             }
+        }
+
+        pub fn findExprAlloc(self: *Program.Builder, fnBuilder: *Function.Builder, expr: Entity) ?Ref {
+            const entryBlockIdx = fnBuilder.basicBlocs.items[0];
+            const entryBlock = self.basicBlocks.items[entryBlockIdx];
+            const allocInstruction = entryBlock.instructions.items[@intFromBool(fnBuilder.isConditionalAlloca)..fnBuilder.nextAllocationIdx];
+            const exprIdx = expr.getIdx();
+
+            for (allocInstruction) |fnAllocRef| {
+                const allocation = self.instructions.alloc.items[fnAllocRef.getIDX()];
+                const allocaRefIdx = allocation.ref.getIDX();
+
+                if (allocaRefIdx == exprIdx) {
+                    return fnAllocRef;
+                }
+            }
+            return null;
         }
     };
 };
