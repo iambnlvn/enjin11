@@ -386,12 +386,66 @@ pub const Program = struct {
                                 else => std.debug.panic("Unsupported arithmetic expression"),
                             };
                         },
-
+                        .InvokeExpr => return self.processInvokeExpr(allocator, fnBuilder, res, ast),
                         //todo: add more cases
                         else => std.debug.panic("Unsupported scope expression"),
                     }
                 },
                 else => std.debug.panic("Unsupported expression level"),
+            }
+        }
+
+        pub fn processInvokeExpr(self: *Builder, allocator: *Allocator, fnBuilder: *Function.Builder, res: Semantics.Result, ast: Entity) Ref {
+            const scopeIdx = ast.getArrayIndex();
+            const invokeExprIdx = ast.getIdx();
+            const astInvokeExpr = &res.functions[self.currentFunction].scopes[scopeIdx].InvokeExpr[invokeExprIdx];
+            const expr = astInvokeExpr.expr;
+            var calledFnRef: Ref = undefined;
+            var astCalledFnDeclaration: Parser.Function = undefined;
+            const calledFnIdx = expr.getIdx();
+            switch (expr.getArrayIndex(.GlobalFunc)) {
+                .ResolvedInternalFn => {
+                    calledFnRef = Function.newFunction(calledFnIdx);
+                    astCalledFnDeclaration = res.functions[calledFnIdx].declaration;
+                },
+                .ResolvedExternalFn => {
+                    calledFnRef = ExternalFunc.new(calledFnIdx);
+                    astCalledFnDeclaration = res.external.functions[calledFnIdx];
+                },
+                else => unreachable,
+            }
+            const calledFnType = astCalledFnDeclaration.type;
+            const calledFnArgCount = astCalledFnDeclaration.argNames.len;
+            if (calledFnArgCount > 0) {
+                var argList = ArrayList(Ref).initCapacity(allocator, calledFnArgCount) catch unreachable;
+
+                for (astInvokeExpr.args) |arg| {
+                    const argLevel = arg.getLevel();
+                    const astIdx = arg.getIdx();
+
+                    switch (argLevel) {
+                        .scope => {
+                            const argId = arg.getArrayId(.scope);
+                            switch (argId) {
+                                .IntegerLiterals => {
+                                    argList.append(Constant.new(.Int, astIdx));
+                                },
+                                .VarDeclaration => {
+                                    const argAllocaRef = self.findExprAlloc(fnBuilder, arg) orelse unreachable;
+                                    const argAlloc = self.instructions.alloc.items[argAllocaRef.getIDX()];
+                                    const argLoad = Instruction.Load.new(allocator, self, argAlloc.baseType, argAllocaRef);
+                                    argList.append(argLoad) catch unreachable;
+                                },
+                                else => std.debug.panic("Unsupported", .{argId}),
+                                // something like an address expr can be added here in case we are passing addr
+                            }
+                        },
+                        else => std.debug.panic("Incorrect levelf", .{argLevel}),
+                    }
+                }
+                return Instruction.new(allocator, self, calledFnType.returnType, calledFnRef, argList.items);
+            } else {
+                return Instruction.new(allocator, self, calledFnType.returnType, calledFnRef, std.mem.zeroes([]Ref));
             }
         }
 
