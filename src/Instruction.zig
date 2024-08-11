@@ -34,6 +34,7 @@ pub const Instruction = struct {
         br,
         icmp,
         alloc,
+        getElPtr,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
@@ -291,6 +292,24 @@ pub const Instruction = struct {
             builder.basicBlocks.items[entryIdx].instructions.insert(fnBuilder.nextAllocationIdx, instruction) catch unreachable;
             fnBuilder.nextAllocationIdx += 1;
             return instruction;
+        }
+    };
+
+    pub const GetElPtr = struct {
+        indices: []const i64,
+        ptr: Ref,
+        type: Type,
+
+        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, gepType: Type, ptr: Ref, indices: []const i64) Ref {
+            var list = &builder.instructions.gep;
+            list.append(.{
+                .indices = indices,
+                .ptr = ptr,
+                .type = builder.getOrCreatePtrType(gepType),
+            }) catch unreachable;
+            const instruction = Instruction.new(allocator, builder, .getElPtr, list.items.len);
+            builder.appendRef(ptr, instruction);
+            return builder.appendInstruction2fn(instruction);
         }
     };
 };
