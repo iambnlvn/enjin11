@@ -112,6 +112,10 @@ pub const Pointer = struct {
     fn getType(self: Type, pointerTypes: []Type.Pointer) Type {
         return pointerTypes[@as(u32, @truncate(self.value))].type;
     }
+
+    pub fn getBaseType(self: Type, ptrTypes: []Type.Pointer) Type {
+        return ptrTypes[self.get_index()].type;
+    }
 };
 
 pub const Builtin = struct {
