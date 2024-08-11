@@ -205,6 +205,7 @@ pub const Program = struct {
             br: ArrayList(Instruction.Br),
             icmp: ArrayList(Instruction.Icmp),
             alloc: ArrayList(Instruction.Alloc),
+            gep: ArrayList(Instruction.GetElPtr),
         },
 
         external: Semantics.External,
@@ -235,6 +236,7 @@ pub const Program = struct {
                     .ret = ArrayList(Instruction.Ret).init(allocator),
                     .icmp = ArrayList(Instruction.Icmp).init(allocator),
                     .alloc = ArrayList(Instruction.Alloc).init(allocator),
+                    .gep = ArrayList(Instruction.GetElPtr).init(allocator),
                 },
 
                 .instructionRefrences = blk: {
@@ -358,7 +360,13 @@ pub const Program = struct {
                         .ArrayLiterals => {
                             return Constant.new(.Array, exprIdx);
                         },
+                        .ArraySubscriptExpr => {
+                            const arraySubscriptExpr = &res.functions[self.currentFunction].scopes[scopeIdx].ArraySubscriptExpr[exprIdx];
+                            var arrayElType: Type = undefined;
+                            const gep = self.retreiveGetElementPtrFromArraySub(allocator, fnBuilder, arraySubscriptExpr, &arrayElType);
 
+                            return Instruction.Load.new(allocator, self, arrayElType, gep);
+                        },
                         .StructLiterals => {
                             return Constant.new(.@"struct", exprIdx);
                         },
@@ -464,6 +472,48 @@ pub const Program = struct {
                 }
             }
             return null;
+        }
+
+        pub fn retreiveGetElementPtrFromArraySub(self: *Builder, allocator: *Allocator, fnBuilder: *Function.Builder, arraySubscriptExpr: *Parser.ArraySubExpr, arrayElType: Type) Ref {
+            const idxExpr = self.getConstantInt();
+
+            const arrayExprAlloc = self.findExprAlloc(fnBuilder, arraySubscriptExpr.expr) orelse unreachable;
+            const alloc = self.instructions.alloc.items[arrayExprAlloc.getIDX()];
+            const arrayTypeRef = alloc.baseType;
+
+            const arrayType = self.arrayTypes.items[arrayTypeRef.getIDX()];
+            arrayElType.* = arrayType.elementType;
+
+            var indices = ArrayList(i64).initCapacity(allocator, 2) catch unreachable;
+            indices.appendAssumeCapacity(0);
+            indices.appendAssumeCapacity(idxExpr);
+
+            return Instruction.GetElPtr.new(allocator, self, arrayElType.*, arrayExprAlloc, indices.items);
+        }
+
+        pub fn getConstantInt(self: *Builder, expr: Entity) i64 {
+            const level = expr.getLevel();
+            switch (level) {
+                .scope => {
+                    const arrayId = expr.getArrayId(.scope);
+
+                    switch (arrayId) {
+                        .IntegerLiterals => {
+                            const intLiteral = self.integerLiterals.items[expr.getIdx()];
+
+                            if (intLiteral.isSigned) {
+                                return -@as(i64, @intCast(intLiteral.value));
+                            } else {
+                                return @as(i64, @intCast(intLiteral.value));
+                            }
+                        },
+
+                        else => std.debug.panic("Invalid", .{}),
+                    }
+                },
+
+                else => std.debug.panic("Invalid level {any}", .{level}),
+            }
         }
     };
 };

@@ -300,7 +300,7 @@ pub const Instruction = struct {
         ptr: Ref,
         type: Type,
 
-        fn new(allocator: *Allocator, builder: *Ir.Program.Builder, gepType: Type, ptr: Ref, indices: []const i64) Ref {
+        pub fn new(allocator: *Allocator, builder: *Ir.Program.Builder, gepType: Type, ptr: Ref, indices: []const i64) Ref {
             var list = &builder.instructions.gep;
             list.append(.{
                 .indices = indices,
