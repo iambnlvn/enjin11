@@ -498,7 +498,7 @@ pub const Program = struct {
             return Instruction.GetElPtr.new(allocator, self, arrayElType.*, arrayExprAlloc, indices.items);
         }
 
-        pub fn retrieveGetElementPtrfromFiledAccess(self: *Self, allocator: *Allocator, fnBuilder: *Function.Builder, fieldAccessExpr: *Parser.FieldAccessExpr, structElType: Type) Ref {
+        pub fn retrieveGetElementPtrfromFieldAccess(self: *Self, allocator: *Allocator, fnBuilder: *Function.Builder, fieldAccessExpr: *Parser.FieldAccessExpr, structElType: Type) Ref {
             var structExprAlloc = Self.findExprAlloc(fnBuilder, fieldAccessExpr.leftExpr) orelse unreachable;
             const alloc = self.instructions.alloc.items[structExprAlloc.getIDX()];
             var fieldTypeRef = alloc.baseType;
@@ -543,5 +543,79 @@ pub const Program = struct {
                 else => std.debug.panic("Invalid level {any}", .{level}),
             }
         }
+
+        pub fn processScope(self: *Builder, allocator: *Allocator, fnBuilder: *Function.Builder, scopeIdx: u32, res: Semantics.Result, existingBlock: ?u32) void {
+            fnBuilder.currentBlock = existingBlock orelse blk: {
+                const blockIdx = BasicBlock.new(allocator, self);
+                self.appendBlock2CurrentFn(blockIdx, scopeIdx);
+
+                break :blk blockIdx;
+            };
+
+            const scope = res.functions[self.currentFunction].scopes[scopeIdx];
+            const returnType = fnBuilder.declaration.type.returnType;
+
+            for (scope.statements) |statementAst| {
+                if (!fnBuilder.isEmittedReturn) {
+                    const statementIdx = statementAst.getIdx();
+                    const statementLevel = statementAst.getLevel();
+
+                    switch (statementLevel) {
+                        .scope => {
+                            const statementType = statementAst.getArrayId(.scope);
+
+                            switch (statementType) {
+                                .InvokeExpr => {
+                                    self.processInvokeExpr(allocator, fnBuilder, res, statementAst);
+                                },
+                                .VarDeclaration => {
+                                    const varDec = scope.VarDeclaration[statementIdx];
+                                    const varType = varDec.type;
+
+                                    Instruction.Alloc.new(allocator, self, Function.VarDeclaration.new(statementIdx), varType, null);
+                                },
+                                .ReturnExpr => {
+                                    fnBuilder.isEmittedReturn = true;
+                                    const retAstExpr = scope.ReturnExpr[statementIdx];
+
+                                    if (retAstExpr.expr) |ast2Return| {
+                                        const retExpr = self.processExpr(allocator, fnBuilder, res, ast2Return);
+
+                                        if (fnBuilder.isConditionalAlloca) {
+                                            _ = Instruction.Store.new(allocator, self, fnBuilder.returnAlloca, returnType);
+
+                                            Instruction.Br.new(allocator, self, fnBuilder.exitBlock);
+                                        } else {
+                                            _ = Instruction.Ret.new(allocator, self, returnType, retExpr);
+                                        }
+                                    } else {
+                                        if (!fnBuilder.isExplicitReturn) {
+                                            _ = Instruction.Ret.new(allocator, self, returnType, null);
+
+                                            fnBuilder.isEmittedReturn = true;
+                                        } else {
+                                            unreachable;
+                                        }
+                                    }
+                                },
+                            }
+                        },
+                    }
+                }
+            }
+        }
+
+        pub fn appendBlock2CurrentFn(self: *Program.Builder, basicBlockIdx: u32, scopeIdx: ?u32) void {
+            var fnBuilder = &self.functionBuilders.items[self.currentFunction];
+            var block = &self.basicBlocks.items[basicBlockIdx];
+            const fnBlockIdx = @as(u32, @intCast(fnBuilder.basicBlocs.items.len));
+            block.fnIdx = fnBlockIdx;
+            fnBuilder.basicBlocs.append(basicBlockIdx) catch unreachable;
+            if (scopeIdx) |scope| {
+                fnBuilder.scope2BasicBlockMap.items[scope] = basicBlockIdx;
+            }
+        }
     };
 };
+
+pub fn main() !void {}
