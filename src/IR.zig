@@ -367,6 +367,13 @@ pub const Program = struct {
 
                             return Instruction.Load.new(allocator, self, arrayElType, gep);
                         },
+                        .FieldAccessExpr => {
+                            const fieldAccessExpr = &res.functions[self.currentFunction].scopes[scopeIdx].FieldAccessExpr[exprIdx];
+                            var structElType: Type = undefined;
+                            const getElPtr = self.retrieveGetElementPtrfromFiledAccess(allocator, fnBuilder, fieldAccessExpr, &structElType);
+
+                            return Instruction.Load.new(allocator, self, structElType, getElPtr);
+                        },
                         .StructLiterals => {
                             return Constant.new(.@"struct", exprIdx);
                         },
@@ -489,6 +496,27 @@ pub const Program = struct {
             indices.appendAssumeCapacity(idxExpr);
 
             return Instruction.GetElPtr.new(allocator, self, arrayElType.*, arrayExprAlloc, indices.items);
+        }
+
+        pub fn retrieveGetElementPtrfromFiledAccess(self: *Self, allocator: *Allocator, fnBuilder: *Function.Builder, fieldAccessExpr: *Parser.FieldAccessExpr, structElType: Type) Ref {
+            var structExprAlloc = Self.findExprAlloc(fnBuilder, fieldAccessExpr.leftExpr) orelse unreachable;
+            const alloc = self.instructions.alloc.items[structExprAlloc.getIDX()];
+            var fieldTypeRef = alloc.baseType;
+
+            if (fieldTypeRef.getId() == .Pointer) {
+                structExprAlloc = Instruction.Load.new(allocator, self, fieldTypeRef, structExprAlloc);
+                fieldTypeRef = Type.Pointer.getBaseType(fieldTypeRef, self.pointerTypes.items);
+            }
+            const structType = self.structTypes.items[fieldTypeRef.getIDX()];
+            const fieldIdx = fieldAccessExpr.fieldExpr.getIdx();
+            const fieldType = structType.types[fieldIdx];
+            structElType.* = fieldType;
+
+            var indices = ArrayList(i64).initCapacity(allocator, 2) catch unreachable;
+            indices.appendAssumeCapacity(0);
+            indices.appendAssumeCapacity(fieldIdx);
+
+            return Instruction.GetElPtr.new(allocator, self, structElType.*, structExprAlloc, indices.items);
         }
 
         pub fn getConstantInt(self: *Builder, expr: Entity) i64 {
