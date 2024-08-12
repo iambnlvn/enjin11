@@ -370,7 +370,7 @@ pub const Program = struct {
                         .FieldAccessExpr => {
                             const fieldAccessExpr = &res.functions[self.currentFunction].scopes[scopeIdx].FieldAccessExpr[exprIdx];
                             var structElType: Type = undefined;
-                            const getElPtr = self.retrieveGetElementPtrfromFiledAccess(allocator, fnBuilder, fieldAccessExpr, &structElType);
+                            const getElPtr = self.retrieveGetElementPtrfromFieldAccess(allocator, fnBuilder, fieldAccessExpr, &structElType);
 
                             return Instruction.Load.new(allocator, self, structElType, getElPtr);
                         },
