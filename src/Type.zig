@@ -1,6 +1,7 @@
 const std = @import("std");
 const expectEqual = std.testing.expectEqual;
 const ArrayList = std.ArrayList;
+const Ir = @import("IR.zig");
 const Type = @This();
 value: u64,
 
@@ -148,6 +149,46 @@ pub fn getId(self: Type) ID {
 
 pub fn getModuleIdx(self: Type) u64 {
     return (self.value & (Module.mask << Module.position)) >> Module.position;
+}
+
+pub fn getSizeResolved(self: Type, program: *const Ir.Program) u64 {
+    switch (self.getId()) {
+        .Integer => return Integer.getBitCount(self) >> 3,
+        .Pointer => return Pointer.size,
+        .Array => {
+            const arrayType = &program.arrayTypes[self.get_index()];
+            return arrayType.type.getSizeResolved(program) * arrayType.exprLen;
+        },
+        .Structure => {
+            var structSize: 32 = 0;
+            const structType = &program.structTypes[self.get_index()];
+            for (structType.types) |t| {
+                structSize += @as(u32, t.getSizeResolved(program));
+            }
+            return structSize;
+        },
+        else => std.debug.panic("getSizeResolved not implemented for type"),
+    }
+}
+
+pub fn getSize(self: Type, program: *const Ir.Program.Builder) u64 {
+    switch (self.getId()) {
+        .Integer => return Integer.getBitCount(self) >> 3,
+        .Pointer => return Pointer.size,
+        .Array => {
+            const arrayType = &program.arrayTypes[self.get_index()];
+            return arrayType.type.getSizeResolved(program) * arrayType.exprLen;
+        },
+        .Structure => {
+            var structSize: 32 = 0;
+            const structType = &program.structTypes[self.get_index()];
+            for (structType.types) |t| {
+                structSize += @as(u32, t.getSizeResolved(program));
+            }
+            return structSize;
+        },
+        else => std.debug.panic("getSizeResolved not implemented for type"),
+    }
 }
 
 test "Integer.new initializes correctly" {
