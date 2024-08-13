@@ -61,12 +61,19 @@ pub const Ref = struct {
     };
     const LLVMID = LLVM.ID;
 
-    fn getId(self: Ref) ID {
+    pub fn getId(self: Ref) ID {
         return @as(ID, @enumFromInt(@as(u8, @intCast((self.value & (std.math.maxInt(std.meta.Int(.unsigned, @bitSizeOf(ID))) << ID.position)) >> ID.position))));
     }
 
-    fn getIDX(self: Ref) u64 {
+    pub fn getIDX(self: Ref) u64 {
         return @as(u64, @truncate(self.value));
+    }
+
+    pub fn getSize(self: Ref, program: *const Program) u64 {
+        const instructionIdx = self.getIDX();
+        const alloc = program.instructions.alloc[instructionIdx];
+        const allocType = alloc.baseType;
+        return allocType.getSizeResolved(program);
     }
 };
 
@@ -598,6 +605,63 @@ pub const Program = struct {
                                         }
                                     }
                                 },
+                                .Assignment => {
+                                    const assignment = scope.Assignment[statementIdx];
+                                    var storeType: Type = undefined;
+
+                                    const leftId = assignment.left.getArrayId(.scope);
+
+                                    switch (leftId) {
+                                        .VarDeclaration => {
+                                            const allocRef = self.findExprAlloc(fnBuilder, assignment.left) orelse unreachable;
+                                            const alloc = self.instructions.alloc.items[allocRef.getIDX()];
+                                            storeType = alloc.baseType;
+
+                                            switch (storeType.getId()) {
+                                                .Array, .Structure => {
+                                                    const rightRef = self.processExpr(allocator, fnBuilder, res, assignment.right);
+                                                    const memCopySize = storeType.getSize(self);
+                                                    _ = Instruction.MemCopy.new(allocator, self, allocRef, rightRef, memCopySize);
+                                                },
+                                                else => {
+                                                    const rightRef = self.processExpr(allocator, fnBuilder, res, assignment.right);
+                                                    _ = Instruction.Store.new(allocator, self, allocRef, rightRef, storeType);
+                                                },
+                                            }
+                                        },
+                                        .ArraySubscriptExpr => {
+                                            const arraySubscriptExpr = &res.functions[self.currentFunction].scopes[scopeIdx].ArraySubExpr[assignment.left.getIdx()];
+                                            var arrElType: Type = undefined;
+
+                                            const gep = self.retreiveGetElementPtrFromArraySub(allocator, fnBuilder, arraySubscriptExpr, &arrElType);
+                                            const rightRef = self.processExpr(allocator, fnBuilder, res, assignment.right);
+
+                                            _ = Instruction.new(allocator, self, rightRef, gep, arrElType);
+                                        },
+                                        else => std.debug.panic("Unsupported assignment type"),
+                                    }
+                                },
+                                .CompoundAssignment => {
+                                    const compoundAssignment = scope.CompoundAssignment[statementIdx];
+                                    const left = self.processExpr(allocator, fnBuilder, res, compoundAssignment.left);
+                                    const right = self.processExpr(allocator, fnBuilder, res, compoundAssignment.right);
+
+                                    const op = switch (compoundAssignment.id) {
+                                        .add => Instruction.Add.new(allocator, self, left, right),
+                                        .sub => Instruction.Sub.new(allocator, self, left, right),
+                                        .mul => Instruction.Mul.new(allocator, self, left, right),
+                                        else => std.debug.panic("Unsupported compound assignment"),
+                                    };
+
+                                    const leftId = compoundAssignment.left.getArrayId(.scope);
+                                    const leftAlloc = switch (leftId) {
+                                        .VarDeclaration => self.findExprAlloc(fnBuilder, compoundAssignment.left) orelse unreachable,
+
+                                        else => std.debug.panic("Unsupported", .{}),
+                                    };
+                                    const alloc = self.instructions.alloc.items[leftAlloc.getIDX()];
+                                    _ = Instruction.Store.new(allocator, self, op, leftAlloc, alloc.baseType);
+                                },
                             }
                         },
                     }
@@ -617,5 +681,3 @@ pub const Program = struct {
         }
     };
 };
-
-pub fn main() !void {}
