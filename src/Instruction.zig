@@ -215,7 +215,7 @@ pub const Instruction = struct {
             }
         }
 
-        fn newConditional(allocator: *Allocator, builder: *Ir.Program.Builder, condition: Ref, destBasicBlock: u32, falsyDestBlock: u32) void {
+        pub fn newConditional(allocator: *Allocator, builder: *Ir.Program.Builder, condition: Ref, destBasicBlock: u32, falsyDestBlock: u32) void {
             const currentBlock = builder.functionBuilders.items[builder.currentFunction].currentBlock;
 
             if (!currentBlock.isTerminated) {

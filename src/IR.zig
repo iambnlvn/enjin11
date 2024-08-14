@@ -662,6 +662,42 @@ pub const Program = struct {
                                     const alloc = self.instructions.alloc.items[leftAlloc.getIDX()];
                                     _ = Instruction.Store.new(allocator, self, op, leftAlloc, alloc.baseType);
                                 },
+                                .Loops => {
+                                    const ast = scope.Loop[statementIdx];
+                                    const prefixBlock = BasicBlock.new(allocator, self);
+                                    const body = BasicBlock.new(allocator, self);
+                                    const postfixBlock = BasicBlock.new(allocator, self);
+                                    const endBlock = BasicBlock.new(allocator, self);
+
+                                    const fnAst = &res.functions[self.currentFunction];
+                                    const prefixScopeAst = fnAst.scopes[ast.prefixScopeIdx];
+
+                                    if (prefixScopeAst.statements.len != 1) {
+                                        std.debug.panic("Invalid loop prefix scope");
+                                    }
+
+                                    self.appendBlock2CurrentFn(prefixBlock, ast.prefixScopeIdx);
+                                    Instruction.Br.new(allocator, self, prefixBlock);
+
+                                    const conditionAst = prefixScopeAst.statements[0];
+                                    const condition = self.processComparison(allocator, fnBuilder, res, conditionAst);
+                                    Instruction.Br.newConditional(allocator, self, condition, body, endBlock);
+
+                                    self.appendBlock2CurrentFn(body, ast.bodyScopeIdx);
+                                    self.processScope(allocator, fnBuilder, ast.bodyScopeIdx, res, body);
+
+                                    Instruction.Br.new(allocator, self, postfixBlock);
+
+                                    self.appendBlock2CurrentFn(postfixBlock, ast.prefixScopeIdx);
+
+                                    self.processScope(allocator, fnBuilder, ast.postfixScopeId, res, postfixBlock);
+
+                                    if (!fnBuilder.isEmittedReturn) {
+                                        Instruction.Br.new(allocator, self, prefixBlock);
+                                        self.appendBlock2CurrentFn(endBlock, null);
+                                        fnBuilder.currentBlock = endBlock;
+                                    }
+                                },
                             }
                         },
                     }
@@ -678,6 +714,26 @@ pub const Program = struct {
             if (scopeIdx) |scope| {
                 fnBuilder.scope2BasicBlockMap.items[scope] = basicBlockIdx;
             }
+        }
+
+        pub fn processComparison(self: *Builder, allocator: *Allocator, fnBuilder: *Function.Builder, res: Semantics.Result, comparisonRef: Entity) Ref {
+            const scopeIdx = comparisonRef.getArrayIndex();
+            const compIdx = comparisonRef.getIdx();
+            const comp = &res.functions[self.currentFunction].scopes[scopeIdx].Comparison[compIdx];
+
+            const left = self.processExpr(allocator, fnBuilder, res, comp.left);
+            const right = self.processExpr(allocator, fnBuilder, res, comp.right);
+
+            const compId: Instruction.Icmp.Id = switch (comp.id) {
+                .LessThan => .slt,
+                .GreaterThan => .sgt,
+                .LessThanOrEqual => .sle,
+                .GreaterThanOrEqual => .sge,
+                .Equal => .eq,
+                .NotEqual => .ne,
+                else => std.debug.panic("Unsupported comparison"),
+            };
+            return Instruction.Icmp.new(allocator, self, compId, left, right);
         }
     };
 };
