@@ -700,7 +700,6 @@ pub const Program = struct {
                                 },
                                 .Branches => {
                                     const ast = scope.Branches[statementIdx];
-
                                     const branchCondition = self.processComparison(allocator, fnBuilder, res, ast.condition);
 
                                     const ifBlock = BasicBlock.new(allocator, self);
@@ -736,6 +735,23 @@ pub const Program = struct {
                                         self.appendBlock2CurrentFn(exitBlock, null);
                                         fnBuilder.currentBlock = exitBlock;
                                     }
+                                },
+                                .BreakExpr => {
+                                    const ast = scope.BreakExpr[statementIdx];
+
+                                    const loopRef = ast.loop2Break;
+                                    const loopIdx = loopRef.getIdx();
+                                    const loopScope = loopRef.getArrayIndex();
+
+                                    const loopAst = &res.functions[self.currentFunction].scopes[loopScope].Loop[loopIdx];
+
+                                    const loopPrefixIdx = fnBuilder.scope2BasicBlockMap.items[loopAst.prefixScopeIdx];
+                                    const loopPrefixBlock = self.basicBlocks.items[loopPrefixIdx];
+
+                                    const BreakInstruction = loopPrefixBlock.instructions.items[loopPrefixBlock.instructions.items.len - 1];
+                                    const br = self.instructions.br.items[BreakInstruction.getIDX()];
+
+                                    Instruction.Br.new(allocator, self, br.falsyDestBlock.?);
                                 },
                             }
                         },

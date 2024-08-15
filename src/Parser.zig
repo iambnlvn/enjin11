@@ -263,7 +263,7 @@ pub const ReturnExpr = struct {
 };
 
 pub const BreakExpr = struct {
-    loop2Break: EntityID,
+    loop2Break: Entity,
 };
 
 pub const ArithmeticExpr = struct {
