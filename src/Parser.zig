@@ -235,7 +235,7 @@ pub const Scope = struct {
 pub const Branch = struct {
     condition: Entity,
     ifScope: u32,
-    elseScope: u32,
+    elseScope: ?u32,
     exitBlk: IR.Ref,
 };
 

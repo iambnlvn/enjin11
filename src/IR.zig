@@ -698,6 +698,45 @@ pub const Program = struct {
                                         fnBuilder.currentBlock = endBlock;
                                     }
                                 },
+                                .Branches => {
+                                    const ast = scope.Branches[statementIdx];
+
+                                    const branchCondition = self.processComparison(allocator, fnBuilder, res, ast.condition);
+
+                                    const ifBlock = BasicBlock.new(allocator, self);
+                                    const exitBlock = BasicBlock.new(allocator, self);
+                                    const elseBlock = if (ast.elseScope) |_| BasicBlock.new(allocator, self) else exitBlock;
+
+                                    var isExitBlockUsed = true;
+
+                                    Instruction.Br.newConditional(allocator, self, branchCondition, ifBlock, elseBlock);
+                                    self.appendBlock2CurrentFn(ifBlock, ast.ifScope);
+
+                                    fnBuilder.isEmittedReturn = false;
+
+                                    self.processScope(allocator, fnBuilder, ast.ifScope, res, ifBlock);
+
+                                    const isIfBlockReturn = fnBuilder.isEmittedReturn;
+                                    Instruction.Br.new(allocator, self, exitBlock);
+
+                                    fnBuilder.isEmittedReturn = false;
+
+                                    if (exitBlock != exitBlock) {
+                                        self.appendBlock2CurrentFn(elseBlock, ast.elseScope);
+                                        self.processScope(allocator, fnBuilder, ast.elseScope.?, res, elseBlock);
+
+                                        Instruction.Br.new(allocator, self, exitBlock);
+                                    }
+
+                                    const isElseBlockReturn = fnBuilder.isEmittedReturn;
+                                    // It doesn't make sense to have a return in both the if and else block
+                                    fnBuilder.isEmittedReturn = isIfBlockReturn and isElseBlockReturn;
+
+                                    if (isExitBlockUsed and !fnBuilder.isEmittedReturn) {
+                                        self.appendBlock2CurrentFn(exitBlock, null);
+                                        fnBuilder.currentBlock = exitBlock;
+                                    }
+                                },
                             }
                         },
                     }
