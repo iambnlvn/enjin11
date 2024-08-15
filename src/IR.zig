@@ -186,7 +186,6 @@ pub const Program = struct {
         alloc: []Instruction.Alloc,
     },
     functions: []Function,
-
     functionTypes: []Type.Function,
     arrayTypes: []Type.Array,
     structTypes: []Type.Struct,
@@ -197,6 +196,14 @@ pub const Program = struct {
     external: Semantics.External,
     basicBlocks: []BasicBlock,
     pointerTypes: []Type.Pointer,
+
+    pub fn getBlockFnIdx(self: *const Program, blockIdx: u32) u32 {
+        return &self.basicBlocks[blockIdx].fnIdx;
+    }
+
+    pub fn getRefs(self: *const Program, instruction: Instruction.ID, idx: u32) []Ref {
+        return self.instructionReferences[@intFromEnum(instruction)][idx].items;
+    }
 
     pub const Builder = struct {
         const Self = @This();
@@ -313,7 +320,9 @@ pub const Program = struct {
                 .GlobalFunc => {
                     self.functionBuilders.items[value.getIDX()].refs.append(refrence) catch unreachable;
                 },
-                // todo: add more cases
+                .Arg => {
+                    self.functionBuilders.items[self.currentFunction].argAlloca.append(refrence) catch unreachable;
+                },
                 else => std.debug.panic("Unsupported ref type"),
             }
         }
