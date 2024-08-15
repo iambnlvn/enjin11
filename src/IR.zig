@@ -342,7 +342,7 @@ pub const Program = struct {
                 .global => {
                     const globalExprId = ast.getArrayId(Level.Global);
                     switch (globalExprId) {
-                        .ResolvedExternalFn => {
+                        .ResolvedInternalFn => {
                             unreachable;
                         },
                         else => std.debug.panic("Unsupported global expression"),
@@ -753,8 +753,10 @@ pub const Program = struct {
 
                                     Instruction.Br.new(allocator, self, br.falsyDestBlock.?);
                                 },
+                                else => std.debug.panic("Unsupported statement type"),
                             }
                         },
+                        else => std.debug.panic("Unsupported statement level"),
                     }
                 }
             }
