@@ -168,6 +168,9 @@ pub const BasicBlock = struct {
         }
         return false;
     }
+    pub fn getIDX(self: BasicBlock) u64 {
+        return @as(u64, @truncate(self.value));
+    }
 };
 
 pub const refList = ArrayList(Ref);
