@@ -2,7 +2,8 @@ const std = @import("std");
 const expectEqual = std.testing.expectEqual;
 const ArrayList = std.ArrayList;
 const Ir = @import("IR.zig");
-const Type = @This();
+const Formatter = @import("Formatter.zig");
+pub const Type = @This();
 value: u64,
 
 pub const UnresolvedType = Type{ .value = 0 };
@@ -188,6 +189,38 @@ pub fn getSize(self: Type, program: *const Ir.Program.Builder) u64 {
             return structSize;
         },
         else => std.debug.panic("getSizeResolved not implemented for type"),
+    }
+}
+
+pub fn toString(self: Type, formatter: *const Formatter) []const u8 {
+    switch (self.getId()) {
+        .Builtin => {
+            if (self.value == Type.Builtin.voidType.value) {
+                return "void";
+            } else if (self.value == Type.Builtin.noreturnType.value) {
+                return "noreturn";
+            } else unreachable;
+        },
+        .Integer => {
+            const bitCount = Integer.getBitCount(self);
+            return switch (Integer.getSignedness(self)) {
+                .Signed => std.fmt.allocPrint(formatter.allocator, "s{}", .{bitCount}) catch unreachable,
+                .Unsigned => std.fmt.allocPrint(formatter.allocator, "u{}", .{bitCount}) catch unreachable,
+            };
+        },
+        .Pointer => {
+            const ptrType = &formatter.builder.pointerTypes.items[self.get_index()];
+            return .fmt.allocPrint(formatter.allocator, "s{}*", .{ptrType.type.toString(formatter)}) catch unreachable;
+        },
+        .Array => {
+            const arrayType = &formatter.builder.ArrayTypes.items[self.get_index()];
+            return .fmt.allocPrint(formatter.allocator, "[{} x {s}]", .{ arrayType.exprLen, arrayType.type.toString(formatter) }) catch unreachable;
+        },
+        .Structure => {
+            const structType = &formatter.builder.structTypes.items[self.get_index()];
+            return structType.name;
+        },
+        else => std.debug.panic("toString not implemented for type"),
     }
 }
 
