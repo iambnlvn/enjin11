@@ -145,7 +145,7 @@ pub const BasicBlock = struct {
     refs: ArrayList(Ref),
     fnIdx: u32,
 
-    fn new(allocator: *Allocator, builder: *Program.Builder) u32 {
+    pub fn new(allocator: *Allocator, builder: *Program.Builder) u32 {
         builder.basicBlocks.append(.{
             .instructions = ArrayList(Ref).init(allocator),
             .refs = ArrayList(Ref).init(allocator),
@@ -154,7 +154,7 @@ pub const BasicBlock = struct {
         return @as(u32, @intCast(builder.basicBlocks.items.len));
     }
 
-    fn getRef(idx: u32) Ref {
+    pub fn getRef(idx: u32) Ref {
         return .{ .value = (@as(u64, @intFromEnum(Ref.ID.BasicBlock)) << Ref.ID.position) | idx };
     }
 
@@ -718,7 +718,7 @@ pub const Program = struct {
                                     const exitBlock = BasicBlock.new(allocator, self);
                                     const elseBlock = if (ast.elseScope) |_| BasicBlock.new(allocator, self) else exitBlock;
 
-                                    var isExitBlockUsed = true;
+                                    const isExitBlockUsed = true;
 
                                     Instruction.Br.newConditional(allocator, self, branchCondition, ifBlock, elseBlock);
                                     self.appendBlock2CurrentFn(ifBlock, ast.ifScope);

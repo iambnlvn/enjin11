@@ -4,8 +4,9 @@ const ArrayList = std.ArrayList;
 const IR = @import("IR.zig");
 const Program = IR.Program;
 const Ref = IR.Ref;
-const Instruction = IR.Instruction;
+const Instruction = @import("Instruction.zig");
 const Type = @import("Type.zig");
+const Format = std.fmt.format;
 
 pub const Formatter = struct {
     allocator: *Allocator,
@@ -38,7 +39,7 @@ pub const Formatter = struct {
     };
 
     fn new(allocator: *Allocator, builder: *Program.Builder) void {
-        var formatter = Formatter{
+        const formatter = Formatter{
             .allocator = allocator,
             .builder = builder,
         };
@@ -81,5 +82,71 @@ pub const Formatter = struct {
             blockPrinter.instructions.append(instructionPrinter) catch unreachable;
         }
         blockPrinters.append(blockPrinter) catch unreachable;
+    }
+
+    fn getIdx(writer: anytype, ref: Ref, slotTracker: *SlotTracker) u32 {
+        for (slotTracker.slots.items, 0..) |slot, idx| {
+            if (slot.value == ref.value) {
+                return @as(u32, idx);
+            }
+        }
+        Format(writer, "Failed to find slot for ref: {d}\n", .{ref}) catch unreachable;
+        unreachable;
+    }
+
+    fn format(self: *const Formatter, comptime fmt: []const u8, _: std.fmt.FormatOptions, writer: anytype) @TypeOf(writer).Error!void {
+        _ = fmt;
+
+        for (self.builder.functionBuilders.items, 0..) |*func, funcIdx| {
+            var slotTracker = SlotTracker{
+                .slots = ArrayList(Ref).init(self.allocator),
+                .startId = 0,
+                .nextId = 0,
+            };
+
+            for (func.declaration.argNames, 0..) |_, argIdx| {
+                slotTracker.newIdx(IR.Function.Arg.new(@as(u32, argIdx)));
+            }
+            slotTracker.newIdx(undefined);
+
+            const basicBlockCount: u64 = func.basicBlocs.items.len;
+            var blockPrinters = ArrayList(BlockPrinter).initCapacity(self.allocator, basicBlockCount) catch unreachable;
+
+            const entryBlockIdx = func.basicBlocs.items[0];
+            try self.setupBlock(&blockPrinters, &slotTracker, entryBlockIdx, 0xffffffff);
+
+            if (basicBlockCount > 1) {
+                for (func.basicBlocks.items[1..]) |basicBlockIdx| {
+                    const blockId = slotTracker.newIdx(IR.BasicBlock.getRef(basicBlockIdx));
+                    try self.setupBlock(&blockPrinters, &slotTracker, basicBlockIdx, blockId);
+                }
+            }
+
+            try Format(writer, "\ndefine {s} @{s}(", .{ func.declaration.type.returnType.toString(self), func.declaration.name }) catch unreachable;
+
+            const argCount = func.declaration.type.argTypes.len;
+
+            if (argCount > 0) {
+                for (func.declaration.type.argTypes[0 .. argCount - 1], 0..) |argType, argIdx| {
+                    try Format(writer, "{s} %{}, ", .{ argType.toString(self), argIdx });
+                }
+
+                try Format(writer, "{s} %{}", .{ func.declaration.type.argTypes[argCount - 1].toString(self), argCount - 1 });
+            }
+
+            try Format(writer, ") #{}\n{c}\n", .{ funcIdx, '{' }) catch unreachable;
+
+            // TODO: Implement block printing
+            // for (blockPrinters.items) |blockPrinter| {
+            //     if (blockPrinter.id != 0xffffffff) {
+            //         try Format(writer, "{}:\n", .{blockPrinter.id}) catch unreachable;
+            //     }
+
+            //     for (blockPrinter.instructions.items) |instructionPrinter| {
+            //         const instructionRef = instructionPrinter.ref;
+            //     }
+            // }
+            try writer.writeAll("}\n");
+        }
     }
 };
