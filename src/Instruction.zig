@@ -35,6 +35,7 @@ pub const Instruction = struct {
         icmp,
         alloc,
         getElPtr,
+        load,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };

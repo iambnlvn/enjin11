@@ -46,7 +46,7 @@ pub const Ref = struct {
     pub const Null = std.mem.zeroes(T);
 
     pub const ID = enum(u8) {
-        none,
+        None,
         Module,
         Arg,
         BasicBlock,
