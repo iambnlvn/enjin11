@@ -236,6 +236,24 @@ pub const Formatter = struct {
                             }
                             try Format(writer, "{}", .{gep.indices[gep.indices.len - 1]});
                         },
+                        .add => {
+                            const add = &self.builder.instructions.add.items[instructionRef.getIDX()];
+                            try self.formatRef(writer, func, add.left, &slotTracker, null);
+                            try writer.writeAll(", ");
+                            try self.formatRef(writer, func, add.right, &slotTracker, null);
+                        },
+                        .sub => {
+                            const sub = &self.builder.instructions.sub.items[instructionRef.getIDX()];
+                            try self.formatRef(writer, func, sub.left, &slotTracker, null);
+                            try writer.writeAll(", ");
+                            try self.formatRef(writer, func, sub.right, &slotTracker, null);
+                        },
+                        .mul => {
+                            const mul = &self.builder.instructions.mul.items[instructionRef.getIDX()];
+                            try self.formatRef(writer, func, mul.left, &slotTracker, null);
+                            try writer.writeAll(", ");
+                            try self.formatRef(writer, func, mul.right, &slotTracker, null);
+                        },
                         else => {
                             try Format(writer, "not implemented: {}\n", .{instructionId});
                             unreachable;
