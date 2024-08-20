@@ -33,7 +33,7 @@ pub const AST = struct {
     fn parseModule(self: *AST, allocator: *Allocator, sourceFile: []const u8, target: std.Target, parentModule: ?Entity) Entity {
         const moduleIdx = self.moduleLen;
         self.moduleLen += 1;
-
+        _ = target; // leave this out for now
         const newCap = moduleIdx + 1;
         var safeCap = self.moduleCap;
 
@@ -162,7 +162,7 @@ pub const AST = struct {
                                 }
                                 var next = parser.lexer.tokens[parser.lexer.nextIdx];
                                 var attributes: u64 = 0;
-                                var externalLibName: []const u8 = undefined;
+                                const externalLibName: []const u8 = undefined;
                                 while (next == .Keyword) : (next = parser.lexer.tokens[parser.lexer.nextIdx]) {
                                     const keyword = parser.getAndConsume(.Keyword).value;
                                     switch (keyword) {
