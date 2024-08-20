@@ -26,6 +26,7 @@ pub const AST = struct {
             .moduleCap = minModuleCount,
         };
         //parse modules from sourceFileName depending on the target
+        _ = ast.parseModule(allocator, sourceFileName, target, null);
         return ast;
     }
 
