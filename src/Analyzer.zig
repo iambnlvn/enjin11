@@ -196,6 +196,91 @@ pub fn analyze(allocator: *Allocator, ast: AST) Sem.Result {
             analyzer.externalLibNames.append(newLibName) catch unreachable;
         }
     }
+
+    const libCount = analyzer.externalLibNames.items.len;
+    var libSymIndices = ArrayList(ArrayList(u32)).initCapacity(allocator, libCount) catch unreachable;
+    libSymIndices.appendNTimesAssumeCapacity(ArrayList(u32).init(allocator), libCount);
+    analyzer.externalLibs.ensureTotalCapacity(libCount) catch unreachable;
+
+    for (moduleArray) |*module| {
+        for (module.libs, 0..) |lib, libIdx| {
+            nextSymName: for (lib.symbolNames.items) |newSymName| {
+                for (analyzer.externalSymbolNames.items, 0..) |existingSymName, symIdx| {
+                    if (std.mem.eql(u8, existingSymName, newSymName)) {
+                        var libSymList = &libSymIndices.items[libIdx];
+                        for (libSymList.items) |libSymIdx| {
+                            if (symIdx == libSymIdx) {
+                                continue :nextSymName;
+                            }
+                        }
+                        analyzer.externalSymbolNames.append(newSymName) catch unreachable;
+                        libSymList.append(@as(u32, @intCast(symIdx))) catch unreachable;
+                    }
+                }
+
+                const symbolIdx = @as(u32, @intCast(analyzer.externalSymbolNames.items.len));
+
+                analyzer.externalSymbolNames.append(newSymName) catch unreachable;
+                libSymIndices.items[libIdx].append(symbolIdx) catch unreachable;
+            }
+        }
+    }
+
+    for (libSymIndices.items) |librarySymbolList| {
+        analyzer.externalSymbolNames.appendNTimesAssumeCapacity(.{ .symbols = librarySymbolList.items });
+    }
+
+    for (moduleArray) |*module| {
+        for (module.externalFns) |*exFn| {
+            const moduleSymName = exFn.declaration.name;
+            const moduleLibIdx = exFn.idx.function;
+            const moduleLibName = module.libNames[moduleLibIdx];
+
+            exFn.idx = idxBlk: {
+                for (analyzer.externalLibNames.items, 0..) |libName, libIdx| {
+                    if (std.mem.eql(u8, moduleLibName, libName)) {
+                        const library = analyzer.externalLibs.items[libIdx];
+
+                        for (library.symbols) |symIdx| {
+                            const symName = analyzer.externalSymbolNames.items[symIdx];
+                            if (std.mem.eql(u8, symName, moduleSymName)) {
+                                const finalLibIdx = @as(u16, @intCast(libIdx));
+                                const finalSymIdx = @as(u16, @intCast(symIdx));
+                                break :idxBlk .{
+                                    .library = finalLibIdx,
+                                    .function = finalSymIdx,
+                                };
+                            }
+                        }
+                        unreachable;
+                    }
+                }
+                unreachable;
+            };
+        }
+    }
+
+    for (moduleArray) |*module| {
+        analyzer.functions.appendSlice(module.internalFns) catch unreachable;
+        analyzer.externalFunctions.appendSlice(module.externalFns) catch unreachable;
+        analyzer.importedModules.appendSlice(module.importedModules) catch unreachable;
+        analyzer.integerLiterals.appendSlice(module.integerLiterals) catch unreachable;
+        analyzer.arrayLiterals.appendSlice(module.arrayLiterals) catch unreachable;
+        analyzer.structLiterals.appendSlice(module.structLiterals) catch unreachable;
+        analyzer.unresolvedTypes.appendSlice(module.unresolvedTypes) catch unreachable;
+        analyzer.arrayTypes.appendSlice(module.arrayTypes) catch unreachable;
+        analyzer.structTypes.appendSlice(module.structTypes) catch unreachable;
+        analyzer.pointerTypes.appendSlice(module.pointerTypes) catch unreachable;
+        analyzer.functionTypes.appendSlice(module.fnTypes) catch unreachable;
+        analyzer.sliceTypes.appendSlice(module.sliceTypes) catch unreachable;
+    }
+
+    analyzer.arrayTypeResolutionBitsets.items.len = analyzer.arrayTypes.items.len;
+    std.mem.set([u64]u1, analyzer.arrayTypeResolutionBitsets.items, std.mem.zeroes([u64]u1));
+    analyzer.structTypeResolutionBitsets.items.len = analyzer.structTypes.items.len;
+    std.mem.set([u64]u1, analyzer.structTypeResolutionBitsets.items, std.mem.zeroes([u64]u1));
+
+    //Todo: implement an analyzeType method to analyze function types
 }
 
 test "Analyser.isArrayTypeResolved" {
