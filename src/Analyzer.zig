@@ -6,6 +6,7 @@ const Sem = @import("Sem.zig");
 const expect = std.testing.expect;
 const Allocator = std.mem.Allocator;
 const AST = @import("AST.zig").AST;
+const Entity = @import("Entity.zig").Entity;
 pub const resolutionBitsetSize = 64;
 
 pub const Analyzer = struct {
@@ -280,7 +281,169 @@ pub fn analyze(allocator: *Allocator, ast: AST) Sem.Result {
     analyzer.structTypeResolutionBitsets.items.len = analyzer.structTypes.items.len;
     std.mem.set([u64]u1, analyzer.structTypeResolutionBitsets.items, std.mem.zeroes([u64]u1));
 
-    //Todo: implement an analyzeType method to analyze function types
+    for (analyzer.functionTypes.items) |*fnType| {
+        fnType.returnType = analyzeType(&analyzer, fnType.returnType);
+        for (fnType.argTypes) |*argType| {
+            argType.* = analyzeType(&analyzer, argType.*);
+        }
+    }
+
+    for (analyzer.externalFunctions.items) |*func| {
+        func.declaration.type.returnType = analyzeType(&analyzer, func.declaration.type.returnType);
+        for (func.declaration.type.argTypes) |*argType| {
+            argType.* = analyzeType(&analyzer, argType.*);
+        }
+    }
+
+    for (analyzer.functions.items) |*func| {
+        func.declaration.type.returnType = analyzeType(&analyzer, func.declaration.type.returnType);
+        for (func.declaration.type.argTypes) |*argType| {
+            argType.* = analyzeType(&analyzer, argType.*);
+        }
+    }
+
+    var moduleIdx: u64 = 0;
+    const moduleCount = analyzer.moduleOffset.len;
+    while (moduleIdx < moduleCount) : (moduleIdx += 1) {
+        const funcRange = getModuleItemSliceRange(.internalFns, &analyzer, moduleIdx);
+
+        for (analyzer.functions.items[funcRange.start..funcRange.end]) |*func| {
+            const mainBlock = &func.scopes[0];
+
+            //Todo: implement a way to analyze scopes
+            _ = mainBlock;
+        }
+    }
+
+    return .{
+        .functions = analyzer.functions.items,
+        .importedModules = analyzer.importedModules.items,
+        .integerLiterals = analyzer.integerLiterals.items,
+        .arrayLiterals = analyzer.arrayLiterals.items,
+        .structLiterals = analyzer.structLiterals.items,
+        .external = .{
+            .functions = analyzer.externalFunctions.items,
+            .libNames = analyzer.externalLibNames.items,
+            .symNames = analyzer.externalSymbolNames,
+            .libs = analyzer.externalLibs,
+        },
+        .pointerTypes = analyzer.pointerTypes.items,
+        .sliceTypes = analyzer.sliceTypes.items,
+        .functionTypes = analyzer.functionTypes.items,
+        .arrayTypes = analyzer.arrayTypes.items,
+        .structTypes = analyzer.structTypes.items,
+    };
+}
+
+fn analyzeType(analyzer: *Analyzer, unresolvedType: Type) Type {
+    const typeId = unresolvedType.getId();
+    const moduleIdx = unresolvedType.getModuleIdx();
+    switch (typeId) {
+        .Builtin, .Integer => return unresolvedType,
+        .Unresolved => {
+            const unresolvedTypeModuleOffset = analyzer.moduleOffset[moduleIdx].counters[@intFromEnum(ModuleStats.ID.unresolvedTypes)];
+            const idx = unresolvedType.getIdx();
+            const unresolvedTypeIdentifier = analyzer.unresolvedTypes.items[unresolvedTypeModuleOffset + idx];
+
+            if (std.mem.eql(u8, unresolvedTypeIdentifier[0], "u")) {
+                if (std.fmt.parseUnsigned(u16, unresolvedTypeIdentifier[1..], 10)) |bitCount| {
+                    const unsignedIntType = Type.Integer.new(bitCount, .Unsigned);
+                    return unsignedIntType;
+                }
+            } else if (std.mem.eql(u8, unresolvedTypeIdentifier[0], "s")) {
+                if (std.fmt.parseUnsigned(u16, unresolvedTypeIdentifier[1..], 10)) |bitCount| {
+                    const signedIntType = Type.Integer.new(bitCount, .Signed);
+                    return signedIntType;
+                }
+            }
+
+            for (analyzer.structTypes.items, 0..) |*structType, structIdx| {
+                if (std.mem.eql(u8, structType.name, unresolvedTypeIdentifier)) {
+                    const resolvedIdx = structIdx;
+                    const resolvedStructType = Type.Struct.new(resolvedIdx, moduleIdx);
+                    const targetStructType = &analyzer.structTypes.items[resolvedIdx];
+
+                    for (targetStructType.types) |*fieldType| {
+                        fieldType.* = analyzeType(analyzer, fieldType.*);
+                    }
+                    return resolvedStructType;
+                }
+            }
+            unreachable;
+        },
+        .Pointer => {
+            const resolvedIdx = analyzer.moduleOffset[moduleIdx].counters[@intFromEnum(ModuleStats.ID.pointerTypes)] + unresolvedType.getIdx();
+
+            const resolvedPtrType = resolveType(unresolvedType, resolvedIdx);
+            var ptrType = &analyzer.pointerTypes.items[resolvedIdx];
+            ptrType.type = analyzeType(analyzer, ptrType.type);
+            return resolvedPtrType;
+        },
+
+        .Array => {
+            const resolvedIdx = analyzer.moduleOffset[moduleIdx].counters[@intFromEnum(ModuleStats.ID.arrayTypes)] + unresolvedType.getIdx();
+
+            const resolvedArrayType = resolveType(unresolvedType, resolvedIdx);
+            if (!analyzer.isArrayTypeResolved(resolvedIdx)) {
+                var arrType = &analyzer.arrayTypes.items[resolvedIdx];
+                arrType.type = analyzeType(analyzer, arrType.type);
+
+                var arrayLenExpr = Entity{ .value = arrType.exprLen };
+                const arrayLenExprId = arrayLenExpr.getArrayId(.scope);
+
+                const arrayLen = switch (arrayLenExprId) {
+                    .integerLiterals => blk: {
+                        resolveEntityIdx(analyzer, .integerLiterals, &arrayLenExpr, moduleIdx);
+                        break :blk analyzer.integerLiterals.items[arrayLenExpr.getIdx()].value;
+                    },
+                    else => std.debug.panic("Invalid {}", .{arrayLenExprId}),
+                };
+                arrType.exprLen = arrayLen;
+            }
+            return resolvedArrayType;
+        },
+        .Structure => {
+            // this is garbage
+            const resolvedIdx = analyzer.moduleOffset[moduleIdx].counters[@intFromEnum(ModuleStats.ID.structTypes)] + unresolvedType.getIdx();
+
+            const resolvedStructType = resolveType(unresolvedType, resolvedIdx);
+            if (!analyzer.isStructTypeResolved(resolvedIdx)) {
+                analyzer.setStructTypeResolved(resolvedIdx);
+            }
+
+            return resolvedStructType;
+        },
+        else => std.debug.panic("Invalid {}", .{typeId}),
+    }
+}
+
+pub fn resolveType(T: Type, newIdx: u64) Type {
+    var oldT = T;
+    oldT.setNewIdx(newIdx);
+    oldT.markResolved();
+    return oldT;
+}
+
+pub fn resolveEntityIdx(analyzer: *Analyzer, comptime moduleStatId: ModuleStats.ID, entity: *Entity, moduleIdx: u64) void {
+    const itemRange = getModuleItemSliceRange(moduleStatId, analyzer, moduleIdx);
+    const idx = @as(u32, @intCast(itemRange.start)) + entity.getIdx();
+
+    entity.setIdx(idx);
+}
+
+pub fn getModuleItemSliceRange(comptime moduleStatId: ModuleStats.ID, analyzer: *Analyzer, moduleIdx: u64) struct { start: u64, end: u64 } {
+    const moduleOffsets = analyzer.moduleOffset[moduleIdx];
+    const internalItemStart = moduleOffsets.counters[@intFromEnum(moduleStatId)];
+    const nextModuleIdx = moduleIdx + 1;
+    const internalItemEnd = if (nextModuleIdx < analyzer.moduleOffset.len) analyzer.moduleOffset[nextModuleIdx].counters[@intFromEnum(moduleStatId)] else switch (comptime moduleStatId) {
+        .internalFns => analyzer.functions.items.len,
+        .externalFns => analyzer.externalFunctions.items.len,
+        .integerLiterals => analyzer.integerLiterals.items.len,
+        .arrayLiterals => analyzer.arrayLiterals.items.len,
+        .importedModules => analyzer.importedModules.items.len,
+        else => std.debug.panic("Invalid module Stat Id {}", .{moduleStatId}),
+    };
+    return .{ .start = internalItemStart, .end = internalItemEnd };
 }
 
 test "Analyser.isArrayTypeResolved" {
