@@ -53,6 +53,10 @@ pub const Entity = packed struct {
         return @as(u32, @truncate(self.value));
     }
 
+    pub fn setIdx(self: *Self, idx: u32) void {
+        self.value = (self.value & 0xffffffff00000000) | idx;
+    }
+
     pub fn getLevel(self: Self) Level {
         return @as(Level, @enumFromInt(@as(Level.IntType, @intCast((self.value & (std.math.maxInt(Level.IntType) << Level.position)) >> Level.position))));
     }
