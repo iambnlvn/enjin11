@@ -13,6 +13,7 @@ pub const Result = struct {
     functionTypes: []Type.Function,
     arrayTypes: []Type.Array,
     structTypes: []Type.Struct,
+    pointerTypes: []Type.Pointer,
 };
 
 pub const External = struct {
