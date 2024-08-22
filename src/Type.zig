@@ -148,6 +148,14 @@ pub fn getId(self: Type) ID {
     return @as(ID, @enumFromInt(@as(u4, @intCast((self.value & (std.math.maxInt(u4) << ID.position)) >> ID.position))));
 }
 
+pub fn getIdx(self: Type) u32 {
+    return @as(u32, @truncate(self.value));
+}
+
+pub fn setNewIdx(self: *Type, newIdx: u64) void {
+    self.value = (self.value & 0xffffffff00000000) | newIdx;
+}
+
 pub fn getModuleIdx(self: Type) u64 {
     return (self.value & (Module.mask << Module.position)) >> Module.position;
 }
