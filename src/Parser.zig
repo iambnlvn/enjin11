@@ -369,7 +369,7 @@ pub const Comparison = struct {
 pub const Loop = struct {
     prefixScopeIdx: u32,
     bodyScopeIdx: u32,
-    postfixScopeId: u32,
+    postfixScopeIdx: u32,
     exitBlk: IR.Ref,
     continueBlk: IR.Ref,
 };
