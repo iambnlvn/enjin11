@@ -111,12 +111,15 @@ pub const Pointer = struct {
         return constructTypeValue(Type.ID.Pointer, moduleIdx, idx);
     }
 
-    fn getType(self: Type, pointerTypes: []Type.Pointer) Type {
+    pub fn getType(self: Type, pointerTypes: []Type.Pointer) Type {
         return pointerTypes[@as(u32, @truncate(self.value))].type;
     }
 
     pub fn getBaseType(self: Type, ptrTypes: []Type.Pointer) Type {
-        return ptrTypes[self.get_index()].type;
+        return ptrTypes[self.getIdx()].type;
+    }
+    pub fn getPointeeType(self: Type, ptrTypes: []Type.Pointer) Type {
+        return ptrTypes[self.getIdx()].type;
     }
 };
 

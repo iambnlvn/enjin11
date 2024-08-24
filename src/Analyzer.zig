@@ -311,8 +311,7 @@ pub fn analyze(allocator: *Allocator, ast: AST) Sem.Result {
         for (analyzer.functions.items[funcRange.start..funcRange.end]) |*func| {
             const mainBlock = &func.scopes[0];
 
-            //Todo: implement a way to analyze scopes
-            _ = mainBlock;
+            analyzeScope(&analyzer, mainBlock, func, moduleIdx);
         }
     }
 
@@ -449,11 +448,9 @@ pub fn getModuleItemSliceRange(comptime moduleStatId: ModuleStats.ID, analyzer: 
 
 pub fn analyzeScope(analyzer: *Analyzer, scope: *Parser.Scope, currentFn: *Parser.Function.Internal, moduleIdx: u64) void {
     const scopeIdx = @as(u32, (@intFromPtr(scope) - @intFromPtr(currentFn.scopes.ptr)) / @sizeOf(Parser.Scope));
-    const statementCount = scope.statements.len;
 
-    for (scope.statements, 0..) |*statement, statementIterIdx| {
+    for (scope.statements) |*statement| {
         const statementIdx = statement.getIdx();
-        const statementLevel = statement.getLevel();
         const statementId = statement.getArrayId(.scope);
 
         switch (statementId) {
@@ -465,7 +462,66 @@ pub fn analyzeScope(analyzer: *Analyzer, scope: *Parser.Scope, currentFn: *Parse
                 var varDec = &scope.VarDeclaration[statementIdx];
                 varDec.type = analyzeType(analyzer, varDec.type);
             },
-            //Todo: implement the rem statements
+            .Assignment => {
+                var assignment = &scope.Assignment[statementIdx];
+                analyzeAssignmentExpr(analyzer, currentFn, assignment, moduleIdx);
+            },
+            .CompoundAssignment => {
+                var compoundAssignment = &scope.CompoundAssignment[statementIdx];
+                analyzeCompoundAssignment(analyzer, currentFn, compoundAssignment, moduleIdx);
+            },
+            .Loops => {
+                var loop = &scope.Loop[statementIdx];
+                var prefScope = &currentFn.scopes[loop.prefixScopeIdx];
+                analyzeScope(analyzer, prefScope, currentFn, moduleIdx);
+                var bodyScope = &currentFn.scopes[loop.bodyScopeIdx];
+                analyzeScope(analyzer, bodyScope, currentFn, moduleIdx);
+                var postScope = &currentFn.scopes[loop.postfixScopeIdx];
+                analyzeScope(analyzer, postScope, currentFn, moduleIdx);
+            },
+            .ReturnExpr => {
+                const returnExpr = &scope.ReturnExpr[statementIdx];
+                const returnType = currentFn.declaration.type.returnType;
+
+                if (returnExpr.expr) |expr2Return| {
+                    const retExprArrId = expr2Return.getArrayId(.scope);
+                    switch (retExprArrId) {
+                        .IntegerLiterals => {
+                            analyzeIntegerLiteral(analyzer, &returnExpr.expr.?, returnType, moduleIdx);
+                        },
+                        .IdentifierExpr => {
+                            const identifier = scope.IdentifierExpr[expr2Return.getIdx()];
+                            const exprType = resolveIdentifierExpr(analyzer, currentFn, &returnExpr.expr.?, scopeIdx, identifier);
+
+                            if (exprType.value != returnType.value) {
+                                std.debug.panic("Type mismatch detected", .{});
+                            }
+                        },
+                        .InvokeExpr => {
+                            var invokeExpr = &scope.InvokeExpr[expr2Return.getIdx()];
+                            _ = analyzeInvokeExpr(analyzer, currentFn, scope, invokeExpr, moduleIdx);
+                        },
+                        .ArithmeticExpr => {
+                            var arithmeticExpr = &scope.ArithmeticExpr[expr2Return.getIdx()];
+                            _ = analyzeArithmeticExpr(analyzer, currentFn, arithmeticExpr, moduleIdx);
+                        },
+                        // TODO!: implement arraySubscriptExpr
+
+                        else => std.debug.panic("Invalid", .{}),
+                    }
+                } else {
+                    if (returnType.value != Type.Builtin.voidType.value or returnType.value != Type.Builtin.noreturnType.value) {
+                        std.debug.panic("Type mismatch detected, Expected void or noreturn type", .{});
+                    }
+                }
+            },
+            .Comparison => {
+                var comp = &scope.Comparison[statementIdx];
+                _ = analyzeComparison(analyzer, currentFn, comp, moduleIdx);
+            },
+
+            //Todo!: implement branches,break,
+            else => std.debug.panic("Invalid", .{}),
         }
     }
 }
@@ -474,12 +530,11 @@ pub fn analyzeInvokeExpr(analyzer: *Analyzer, currentFn: *Parser.Function.Intern
     const expr2Invoke = invokeExpr.expr;
     const scopeIdx = expr2Invoke.getArrayIndex();
     const expr2invokeIdx = expr2Invoke.getIdx();
-    const expr2InvokeLevel = expr2Invoke.getLevel();
     const expr2InvokeId = expr2invokeIdx.getArrayId(.scope);
     var fnType: Type.Function = undefined;
 
     const resolvedExpr2Invoke: Entity = blk: {
-        if (expr2invokeId == .IdentifierExpr) {
+        if (expr2InvokeId == .IdentifierExpr) {
             const invokeExprName = scope.IdentifierExpr[expr2invokeIdx];
             for (analyzer.functions.items, 0..) |func, funcIdx| {
                 if (std.mem.eql(u8, func.declaration.name, invokeExprName)) {
@@ -492,14 +547,10 @@ pub fn analyzeInvokeExpr(analyzer: *Analyzer, currentFn: *Parser.Function.Intern
         } else if (expr2InvokeId == .FieldAccessExpr) {
             const fieldExpr = scope.FieldAccessExpr[expr2invokeIdx];
             const left = fieldExpr.leftExpr;
-            const leftLevel = left.getLevel();
-            const leftArrId = left.getArrayId(.scope);
             const leftIdx = left.getIdx();
             const leftName = scope.IdentifierExpr[leftIdx];
 
             const field = fieldExpr.fieldExpr;
-            const fieldLevel = field.getLevel();
-            const fieldArrId = field.getArrayId(.scope);
             const fieldIdx = field.getIdx();
             const fieldName = scope.IdentifierExpr[fieldIdx];
             const importedModuleRange = getModuleItemSliceRange(.importedModules, analyzer, moduleIdx);
@@ -542,9 +593,8 @@ pub fn analyzeInvokeExpr(analyzer: *Analyzer, currentFn: *Parser.Function.Intern
     if (invokeExpr.args.len > 0) {
         const argTypes = fnType.argTypes;
         for (invokeExpr.args, 0..) |*arg, argIdx| {
-            const argLevel = arg.getLevel();
             const arrId = arg.getArrayId(.scope);
-            const argType = argType[argIdx];
+            const argType = argTypes[argIdx];
 
             switch (arrId) {
                 .IntegerLiteral => analyzeIntegerLiteral(analyzer, arg, argType, moduleIdx),
@@ -590,6 +640,160 @@ pub fn resolveIdentifierExpr(analyzer: *Analyzer, currentFn: *Parser.Function.In
     }
     std.debug.panic("IdentifierExpr {s} not found", .{name});
 }
+
+pub fn analyzeBinaryExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, left: *Entity, right: *Entity, moduleIdx: u64) Type {
+    const leftType = analyzeTypedExpr(analyzer, func, left, moduleIdx, null);
+    const rightType = analyzeTypedExpr(analyzer, func, right, moduleIdx, leftType);
+
+    if (leftType.value != rightType.value) {
+        if (leftType.getId() == .Integer and rightType.getId() == .Integer) {
+            const leftBits = Type.Integer.getBitCount(leftType);
+            const rightBits = Type.Integer.getBitCount(rightType);
+
+            if (leftBits == rightBits) {
+                const leftSignedness = Type.Integer.getSignedness(leftType);
+                const rightSignedness = Type.Integer.getSignedness(rightType);
+
+                if (leftSignedness == rightSignedness) {
+                    unreachable;
+                } else {
+                    std.debug.panic("Type mismatch due to difference in signedness", .{});
+                }
+            } else {
+                std.debug.panic("Type mismatch due to difference in bit count", .{});
+            }
+        } else if (leftType.getId() == .Pointer and rightType.getId() == .Pointer) {
+            //Todo: fgure out how to compare pointers
+            // const leftPtrType = Type.Pointer.getPointeeType(leftType);
+            // const rightPtrType = Type.Pointer.getPointeeType(rightType);
+
+            // if (leftPtrType.value != rightPtrType.value) {
+            //     std.debug.panic("Type mismatch due to difference in pointee type", .{});
+            // }
+            return leftType;
+        } else {
+            std.debug.panic("Type mismatch detected", .{});
+        }
+    }
+    return leftType;
+}
+
+pub fn analyzeAssignmentExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, assignment: *Parser.Assignment, moduleIdx: u64) void {
+    _ = analyzeBinaryExpr(analyzer, func, &assignment.left, &assignment.right, moduleIdx);
+}
+
+pub fn analyzeCompoundAssignment(analyzer: *Analyzer, func: *Parser.Function.Internal, compoundAssignment: *Parser.CompoundAssignment, moduleIdx: u64) void {
+    _ = analyzeBinaryExpr(analyzer, func, &compoundAssignment.left, &compoundAssignment.right, moduleIdx);
+}
+
+pub fn analyzeArithmeticExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, arithExpr: **Parser.ArithmeticExpr, moduleIdx: u64) void {
+    return analyzeBinaryExpr(analyzer, func, &arithExpr.left, &arithExpr.right, moduleIdx);
+}
+
+pub fn analyzeComparison(analyzer: *Analyzer, func: *Parser.Function.Internal, comparison: *Parser.Comparison, moduleIdx: u64) Type {
+    _ = analyzeBinaryExpr(analyzer, func, &comparison.left, &comparison.right, moduleIdx);
+    return Type.Boolean;
+}
+
+pub fn analyzeArraySubExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, arraySubExpr: *Parser.ArraySubExpr, moduleIdx: u64, expectedType: ?Type) Type {
+    const arrayTypeRef = analyzeTypedExpr(analyzer, func, &arraySubExpr.expr, moduleIdx, null);
+    const arrayTypeIdx = arrayTypeRef.getIdx();
+    const arrayType = &analyzer.arrayTypes.items[arrayTypeIdx];
+
+    const expectedTypeHint = Type.Integer.new(64, .Unsigned);
+    _ = analyzeTypedExpr(analyzer, func, &arraySubExpr.index, moduleIdx, expectedTypeHint);
+
+    const actualType = arrayType.type;
+
+    if (expectedType) |exType| {
+        const expected = exType;
+        if (expected.getId() != actualType.getId()) {
+            std.debug.panic("Type mismatch detected", .{});
+        }
+    }
+    return actualType;
+}
+
+pub fn analyzeTypedExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, expr: *Entity, moduleIdx: u64, expectedType: ?Type) Type {
+    const exprLevel = expr.getLevel();
+    const exprIdx = expr.getIdx();
+    const scopeIdx = expr.getArrayIndex();
+
+    const exprType = blk: {
+        switch (exprLevel) {
+            .scope => {
+                const arrayId = expr.getArrayId(.scope);
+
+                switch (arrayId) {
+                    .IntegerLiterals => {
+                        analyzeIntegerLiteral(analyzer, expr, expectedType, moduleIdx);
+                        if (expectedType) |t| {
+                            const typeId = t.getId();
+
+                            if (typeId != .integer) {
+                                std.debug.panic("expected integer got {}", .{typeId});
+                            }
+                            break :blk t;
+                        } else unreachable;
+                    },
+                    .ArrayLiterals => {
+                        break :blk analyzeArrayLiteral(analyzer, expr, moduleIdx, expectedType);
+                    },
+                    .VarDeclaration => {
+                        var varDec = &func.scopes[scopeIdx].VarDeclaration[exprIdx];
+                        varDec.type = analyzeType(analyzer, varDec.type);
+                        if (expectedType) |t| {
+                            if (varDec.type.value != t.value) {
+                                std.debug.panic("Types don't match", .{});
+                            }
+                        }
+                        break :blk varDec.type;
+                    },
+                    .IdentifierExpr => {
+                        const identifier = func.scopes[scopeIdx].IdentifierExpr[exprIdx];
+                        const exprType = resolveIdentifierExpr(analyzer, func, expr, scopeIdx, identifier);
+                        break :blk exprType;
+                    },
+                    .InvokeExpr => {
+                        var exprScope = &func.scopes[scopeIdx];
+                        var invokeExpressions = exprScope.InvokeExpr;
+                        var invokeExpr = &invokeExpressions[exprIdx];
+                        break :blk analyzeInvokeExpr(analyzer, func, exprScope, invokeExpr, moduleIdx);
+                    },
+                    .ArithmeticExpr => {
+                        var arithExperssionsScope = func.scopes[scopeIdx].ArithmeticExpr;
+                        var arithExpr = &arithExperssionsScope[exprIdx];
+                        break :blk analyzeArithmeticExpr(analyzer, func, arithExpr, moduleIdx);
+                    },
+                    .ArraySubscriptExpr => {
+                        var arrSubExpr = &func.scopes[scopeIdx].ArraySubExpr[exprIdx];
+                        break :blk analyzeArraySubExpr(analyzer, func, arrSubExpr, moduleIdx, expectedType);
+                    },
+                    //TODO!: implement fieldAccessExpr,structLiterals,
+                    else => std.debug.panic("Invalid", .{}),
+                }
+            },
+            else => std.debug.panic("unknown level", .{}),
+        }
+    };
+    return exprType;
+}
+
+pub fn analyzeArrayLiteral(analyzer: *Analyzer, expr: *Entity, moduleIdx: u64, expectedType: ?Type) Type {
+    resolveEntityIdx(analyzer, .arrayLiterals, expr, moduleIdx);
+    const arrLiteral = &analyzer.arrayLiterals.items[expr.getIdx()];
+    const type2check = expectedType.?;
+
+    const arrType = &analyzer.arrayTypes.items[type2check.getIdx()];
+
+    if (arrType.exprLen != arrLiteral.elements.len) {
+        std.debug.panic("Array length mismatch", .{});
+    }
+
+    arrLiteral.type = type2check;
+    return type2check;
+}
+
 test "Analyser.isArrayTypeResolved" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
