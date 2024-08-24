@@ -7,6 +7,7 @@ const expect = std.testing.expect;
 const Allocator = std.mem.Allocator;
 const AST = @import("AST.zig").AST;
 const Entity = @import("Entity.zig").Entity;
+const EntityId = @import("EntityID.zig").ID;
 pub const resolutionBitsetSize = 64;
 
 pub const Analyzer = struct {
@@ -446,6 +447,149 @@ pub fn getModuleItemSliceRange(comptime moduleStatId: ModuleStats.ID, analyzer: 
     return .{ .start = internalItemStart, .end = internalItemEnd };
 }
 
+pub fn analyzeScope(analyzer: *Analyzer, scope: *Parser.Scope, currentFn: *Parser.Function.Internal, moduleIdx: u64) void {
+    const scopeIdx = @as(u32, (@intFromPtr(scope) - @intFromPtr(currentFn.scopes.ptr)) / @sizeOf(Parser.Scope));
+    const statementCount = scope.statements.len;
+
+    for (scope.statements, 0..) |*statement, statementIterIdx| {
+        const statementIdx = statement.getIdx();
+        const statementLevel = statement.getLevel();
+        const statementId = statement.getArrayId(.scope);
+
+        switch (statementId) {
+            .invokeExpr => {
+                const invokeExpr = &scope.InvokeExpr[statementIdx];
+                _ = analyzeInvokeExpr(analyzer, currentFn, scope, invokeExpr, moduleIdx);
+            },
+            .VarDeclaration => {
+                var varDec = &scope.VarDeclaration[statementIdx];
+                varDec.type = analyzeType(analyzer, varDec.type);
+            },
+            //Todo: implement the rem statements
+        }
+    }
+}
+
+pub fn analyzeInvokeExpr(analyzer: *Analyzer, currentFn: *Parser.Function.Internal, scope: *Parser.Scope, invokeExpr: *Parser.InvokeExpr, moduleIdx: u64) Type {
+    const expr2Invoke = invokeExpr.expr;
+    const scopeIdx = expr2Invoke.getArrayIndex();
+    const expr2invokeIdx = expr2Invoke.getIdx();
+    const expr2InvokeLevel = expr2Invoke.getLevel();
+    const expr2InvokeId = expr2invokeIdx.getArrayId(.scope);
+    var fnType: Type.Function = undefined;
+
+    const resolvedExpr2Invoke: Entity = blk: {
+        if (expr2invokeId == .IdentifierExpr) {
+            const invokeExprName = scope.IdentifierExpr[expr2invokeIdx];
+            for (analyzer.functions.items, 0..) |func, funcIdx| {
+                if (std.mem.eql(u8, func.declaration.name, invokeExprName)) {
+                    continue;
+                }
+                fnType = func.declaration.type;
+                break :blk Entity.new(funcIdx, EntityId.Global.ResolvedInternalFn, 0);
+            }
+            unreachable;
+        } else if (expr2InvokeId == .FieldAccessExpr) {
+            const fieldExpr = scope.FieldAccessExpr[expr2invokeIdx];
+            const left = fieldExpr.leftExpr;
+            const leftLevel = left.getLevel();
+            const leftArrId = left.getArrayId(.scope);
+            const leftIdx = left.getIdx();
+            const leftName = scope.IdentifierExpr[leftIdx];
+
+            const field = fieldExpr.fieldExpr;
+            const fieldLevel = field.getLevel();
+            const fieldArrId = field.getArrayId(.scope);
+            const fieldIdx = field.getIdx();
+            const fieldName = scope.IdentifierExpr[fieldIdx];
+            const importedModuleRange = getModuleItemSliceRange(.importedModules, analyzer, moduleIdx);
+            const importedModules = analyzer.importedModules.items[importedModuleRange.start..importedModuleRange.end];
+
+            for (importedModules) |importedModule| {
+                if (!std.mem.eql(u8, importedModule.alias.?, leftName)) {
+                    continue;
+                }
+                const importedModuleIdx = importedModule.module.getIdx();
+
+                const internalFnsRange = getModuleItemSliceRange(.internalFns, analyzer, importedModuleIdx);
+                const internalFns = analyzer.functions.items[internalFnsRange.start..internalFnsRange.end];
+
+                for (internalFns, 0..) |func, funcIdx| {
+                    if (!std.mem.eql(u8, func.declaration.name, fieldName)) {
+                        continue;
+                    }
+                    fnType = func.declaration.type;
+                    break :blk Entity.new(funcIdx + internalFnsRange.start, EntityId.Global.ResolvedInternalFn, 0);
+                }
+
+                const externalFnsRange = getModuleItemSliceRange(.externalFns, analyzer, importedModuleIdx);
+                const externalFns = analyzer.externalFns.items[externalFnsRange.start..externalFnsRange.end];
+
+                for (externalFns, 0..) |func, funcIdx| {
+                    if (!std.mem.eql(u8, func.declaration.name, fieldName)) {
+                        continue;
+                    }
+                    fnType = func.declaration.type;
+                    break :blk Entity.new(funcIdx + externalFnsRange.start, EntityId.Global.ResolvedExternalFn, 0);
+                }
+            }
+            unreachable;
+        } else unreachable;
+    };
+
+    invokeExpr.expr = resolvedExpr2Invoke;
+
+    if (invokeExpr.args.len > 0) {
+        const argTypes = fnType.argTypes;
+        for (invokeExpr.args, 0..) |*arg, argIdx| {
+            const argLevel = arg.getLevel();
+            const arrId = arg.getArrayId(.scope);
+            const argType = argType[argIdx];
+
+            switch (arrId) {
+                .IntegerLiteral => analyzeIntegerLiteral(analyzer, arg, argType, moduleIdx),
+                .IdentifierExpr => {
+                    const identifier = scope.IdentifierExpr[arg.getIdx()];
+                    const exprType = resolveIdentifierExpr(analyzer, currentFn, arg, scopeIdx, identifier);
+                    if (argType.value != exprType.value) std.debug.panic("Type mismatch detected", .{});
+                },
+                else => std.debug.panic("Invalid", .{}),
+            }
+        }
+    }
+}
+
+pub fn analyzeIntegerLiteral(analyzer: *Analyzer, entity: *Entity, expectedType: ?Type, moduleIdx: u64) void {
+    const type2TypeCheck = expectedType.?;
+    if (type2TypeCheck.getId() != .Integer) std.debug.panic("Invalid");
+    resolveEntityIdx(analyzer, .integerLiterals, entity, moduleIdx);
+}
+
+pub fn resolveIdentifierExpr(analyzer: *Analyzer, currentFn: *Parser.Function.Internal, expr: *Entity, scopeIdx: u32, name: []const u8) Type {
+    var currentScopeIdx = scopeIdx;
+    for (currentFn.declaration.argNames, 0..) |argName, argIdx| {
+        if (std.mem.eql(u8, argName, name)) {
+            const argId = Entity.new(argIdx, EntityId.Scope.Args, 0);
+            expr.* = argId;
+            return currentFn.declaration.type.argTypes[argIdx];
+        }
+    }
+    _ = analyzer;
+    var scopeTreeExplored = false;
+
+    while (!scopeTreeExplored) {
+        const scope = &currentFn.scopes[currentScopeIdx];
+        for (scope.VarDeclaration, 0..) |varDec, varDecIdx| {
+            if (std.mem.eql(u8, varDec.name, name)) {
+                expr.* = Entity.new(varDecIdx, EntityId.Scope.VarDeclaration, currentScopeIdx);
+                return varDec.type;
+            }
+        }
+        scopeTreeExplored = scopeIdx == 0;
+        if (!scopeTreeExplored) currentScopeIdx = scope.Parent.scope;
+    }
+    std.debug.panic("IdentifierExpr {s} not found", .{name});
+}
 test "Analyser.isArrayTypeResolved" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
