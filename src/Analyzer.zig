@@ -463,20 +463,20 @@ pub fn analyzeScope(analyzer: *Analyzer, scope: *Parser.Scope, currentFn: *Parse
                 varDec.type = analyzeType(analyzer, varDec.type);
             },
             .Assignment => {
-                var assignment = &scope.Assignment[statementIdx];
+                const assignment = &scope.Assignment[statementIdx];
                 analyzeAssignmentExpr(analyzer, currentFn, assignment, moduleIdx);
             },
             .CompoundAssignment => {
-                var compoundAssignment = &scope.CompoundAssignment[statementIdx];
+                const compoundAssignment = &scope.CompoundAssignment[statementIdx];
                 analyzeCompoundAssignment(analyzer, currentFn, compoundAssignment, moduleIdx);
             },
             .Loops => {
-                var loop = &scope.Loop[statementIdx];
-                var prefScope = &currentFn.scopes[loop.prefixScopeIdx];
+                const loop = &scope.Loop[statementIdx];
+                const prefScope = &currentFn.scopes[loop.prefixScopeIdx];
                 analyzeScope(analyzer, prefScope, currentFn, moduleIdx);
-                var bodyScope = &currentFn.scopes[loop.bodyScopeIdx];
+                const bodyScope = &currentFn.scopes[loop.bodyScopeIdx];
                 analyzeScope(analyzer, bodyScope, currentFn, moduleIdx);
-                var postScope = &currentFn.scopes[loop.postfixScopeIdx];
+                const postScope = &currentFn.scopes[loop.postfixScopeIdx];
                 analyzeScope(analyzer, postScope, currentFn, moduleIdx);
             },
             .ReturnExpr => {
@@ -498,14 +498,17 @@ pub fn analyzeScope(analyzer: *Analyzer, scope: *Parser.Scope, currentFn: *Parse
                             }
                         },
                         .InvokeExpr => {
-                            var invokeExpr = &scope.InvokeExpr[expr2Return.getIdx()];
+                            const invokeExpr = &scope.InvokeExpr[expr2Return.getIdx()];
                             _ = analyzeInvokeExpr(analyzer, currentFn, scope, invokeExpr, moduleIdx);
                         },
                         .ArithmeticExpr => {
-                            var arithmeticExpr = &scope.ArithmeticExpr[expr2Return.getIdx()];
+                            const arithmeticExpr = &scope.ArithmeticExpr[expr2Return.getIdx()];
                             _ = analyzeArithmeticExpr(analyzer, currentFn, arithmeticExpr, moduleIdx);
                         },
-                        // TODO!: implement arraySubscriptExpr
+                        .ArraySubExpr => {
+                            const arraySubExpr = &scope.ArraySubExpr[expr2Return.getIdx()];
+                            _ = analyzeArraySubExpr(analyzer, currentFn, arraySubExpr, moduleIdx, null);
+                        },
 
                         else => std.debug.panic("Invalid", .{}),
                     }
@@ -516,11 +519,26 @@ pub fn analyzeScope(analyzer: *Analyzer, scope: *Parser.Scope, currentFn: *Parse
                 }
             },
             .Comparison => {
-                var comp = &scope.Comparison[statementIdx];
+                const comp = &scope.Comparison[statementIdx];
                 _ = analyzeComparison(analyzer, currentFn, comp, moduleIdx);
             },
+            .branches => {
+                const branch = &scope.Branches[statementIdx];
+                const branchCompIdx = branch.condition.getIdx();
+                const branchCompArrIdx = branch.condition.getArrayIndex();
+                var branchCompScope = &currentFn.scopes[branchCompArrIdx];
+                const branchComp = &branchCompScope.Comparison[branchCompIdx];
+                _ = analyzeComparison(analyzer, currentFn, branchComp, moduleIdx);
+                const ifScope = &currentFn.scopes[branch.ifScope];
+                analyzeScope(analyzer, ifScope, currentFn, moduleIdx);
 
-            //Todo!: implement branches,break,
+                if (branch.elseScope) |elseScopeIdx| {
+                    const elseScope = &currentFn.scopes[elseScopeIdx];
+                    analyzeScope(analyzer, elseScope, currentFn, moduleIdx);
+                }
+            },
+
+            //Todo!: figure out break expressions
             else => std.debug.panic("Invalid", .{}),
         }
     }
@@ -755,21 +773,44 @@ pub fn analyzeTypedExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, ex
                         break :blk exprType;
                     },
                     .InvokeExpr => {
-                        var exprScope = &func.scopes[scopeIdx];
+                        const exprScope = &func.scopes[scopeIdx];
                         var invokeExpressions = exprScope.InvokeExpr;
-                        var invokeExpr = &invokeExpressions[exprIdx];
+                        const invokeExpr = &invokeExpressions[exprIdx];
                         break :blk analyzeInvokeExpr(analyzer, func, exprScope, invokeExpr, moduleIdx);
                     },
                     .ArithmeticExpr => {
                         var arithExperssionsScope = func.scopes[scopeIdx].ArithmeticExpr;
-                        var arithExpr = &arithExperssionsScope[exprIdx];
+                        const arithExpr = &arithExperssionsScope[exprIdx];
                         break :blk analyzeArithmeticExpr(analyzer, func, arithExpr, moduleIdx);
                     },
                     .ArraySubscriptExpr => {
-                        var arrSubExpr = &func.scopes[scopeIdx].ArraySubExpr[exprIdx];
+                        const arrSubExpr = &func.scopes[scopeIdx].ArraySubExpr[exprIdx];
                         break :blk analyzeArraySubExpr(analyzer, func, arrSubExpr, moduleIdx, expectedType);
                     },
-                    //TODO!: implement fieldAccessExpr,structLiterals,
+                    .FieldAccessExpr => {
+                        const fieldAccessExpr = &func.scopes[scopeIdx].FieldAccessExpr[exprIdx];
+                        break :blk analyzeFieldAccessExpr(analyzer, func, &func.scopes[scopeIdx], fieldAccessExpr, moduleIdx);
+                    },
+                    .structLiterals => {
+                        const structTypeRef = expectedType orelse unreachable;
+                        const resolvedIdx = analyzer.moduleOffset[moduleIdx].counters[@intFromEnum(ModuleStats.ID.structLiterals)] + exprIdx;
+
+                        var structLiteral = &analyzer.structLiterals.items[resolvedIdx];
+                        structLiteral.type = structTypeRef;
+                        const structType = &analyzer.structTypes.items[structTypeRef.getIdx()];
+
+                        litField: for (structLiteral.fields.names, 0..) |fieldName, fieldNameIdx| {
+                            for (structType.names, 0..) |fieldNameCand, fieldIdx| {
+                                if (std.mem.eql(u8, fieldNameCand, fieldName)) {
+                                    _ = analyzeTypedExpr(analyzer, func, &structLiteral.fields.initilizers[fieldNameIdx], moduleIdx, structType.types[fieldIdx]);
+                                    continue :litField;
+                                }
+                            }
+                            std.debug.panic("No field in struct type", .{});
+                        }
+                        break :blk structTypeRef;
+                    },
+
                     else => std.debug.panic("Invalid", .{}),
                 }
             },
@@ -794,6 +835,21 @@ pub fn analyzeArrayLiteral(analyzer: *Analyzer, expr: *Entity, moduleIdx: u64, e
     return type2check;
 }
 
+fn analyzeFieldAccessExpr(analyzer: *Analyzer, func: *Parser.Function.Internal, arraySubExpr: *Parser.ArraySubExpr, moduleIdx: u64, expectedType: ?Type) Type {
+    const arrTypeRef = analyzeTypedExpr(analyzer, func, &arraySubExpr.expr, moduleIdx, null);
+    const arrTypeIdx = arrTypeRef.getIdx();
+    const arrType = &analyzer.arrayTypes.items[arrTypeIdx];
+    const expectedTypeHint = Type.Integer.new(64, .Unsigned);
+    _ = analyzeTypedExpr(analyzer, func, &arraySubExpr.idx, moduleIdx, expectedTypeHint);
+    const actualType = arrType.type;
+    if (expectedType) |type2check| {
+        const expected = type2check;
+        if (expected.getId() != actualType.getId()) {
+            std.debug.panic("Type mismatch detected", .{});
+        }
+    }
+    return actualType;
+}
 test "Analyser.isArrayTypeResolved" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
