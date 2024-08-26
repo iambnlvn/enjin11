@@ -101,7 +101,7 @@ pub const StructLiteral = struct {
                 .names = fieldNames,
                 .initilizers = fieldExpr,
             },
-            .type = std.mem.zeros(Type),
+            .type = std.mem.zeroes(Type),
         }) catch unreachable;
         return id;
     }
@@ -139,11 +139,11 @@ pub const Function = struct {
 
 pub const Parent = struct {
     expr: Entity,
-    scope: Entity,
+    scope: u32,
 };
 //TODO:make naming consistent
 pub const Scope = struct {
-    statements: []Entity,
+    Statements: []Entity,
     VarDeclaration: []VarDeclaration,
     Assignment: []Assignment,
     CompoundAssignment: []CompoundAssignment,
@@ -183,21 +183,21 @@ pub const Scope = struct {
             builder.currentScope = @as(u32, @intCast(builder.scopeBuilders.items.len));
             builder.scopes.append(undefined) catch unreachable;
             builder.scopeBuilders.append(Scope.Builder{
-                .Statements = ArrayList(Entity).init(allocator),
-                .VarDeclarations = ArrayList(VarDeclaration).init(allocator),
-                .Assignments = ArrayList(Assignment).init(allocator),
-                .CompoundAssignments = ArrayList(CompoundAssignment).init(allocator),
-                .Comparisons = ArrayList(Comparison).init(allocator),
-                .BreakExprs = ArrayList(BreakExpr).init(allocator),
-                .ReturnExprs = ArrayList(ReturnExpr).init(allocator),
-                .InvokeExprs = ArrayList(InvokeExpr).init(allocator),
-                .IdentifierExpr = ArrayList(IdentifierExpr).init(allocator),
-                .ArithmeticExprs = ArrayList(ArithmeticExpr).init(allocator),
-                .ArraySubExprs = ArrayList(ArraySubExpr).init(allocator),
-                .FieldAccessExpr = ArrayList(FieldAccessExpr).init(allocator),
+                .Statements = ArrayList(Entity).init(allocator.*),
+                .VarDeclarations = ArrayList(VarDeclaration).init(allocator.*),
+                .Assignments = ArrayList(Assignment).init(allocator.*),
+                .CompoundAssignments = ArrayList(CompoundAssignment).init(allocator.*),
+                .Comparisons = ArrayList(Comparison).init(allocator.*),
+                .BreakExprs = ArrayList(BreakExpr).init(allocator.*),
+                .ReturnExprs = ArrayList(ReturnExpr).init(allocator.*),
+                .InvokeExprs = ArrayList(InvokeExpr).init(allocator.*),
+                .IdentifierExpr = ArrayList(IdentifierExpr).init(allocator.*),
+                .ArithmeticExprs = ArrayList(ArithmeticExpr).init(allocator.*),
+                .ArraySubExprs = ArrayList(ArraySubExpr).init(allocator.*),
+                .FieldAccessExpr = ArrayList(FieldAccessExpr).init(allocator.*),
                 .LastLoop = last,
-                .Loops = ArrayList(Loop).init(allocator),
-                .Branches = ArrayList(Branch).init(allocator),
+                .Loops = ArrayList(Loop).init(allocator.*),
+                .Branches = ArrayList(Branch).init(allocator.*),
                 .Parent = .{ .expr = parentExpr, .scope = parentScope },
             }) catch unreachable;
             return builder.currentScope;
@@ -246,7 +246,7 @@ pub const VarDeclaration = struct {
     pub fn new(fnBuilder: *Function.Builder, name: []const u8, varType: Type) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
-        const varDeclarationIdx = currentScope.VarDeclaration.items.len;
+        const varDeclarationIdx = currentScope.VarDeclarations.items.len;
         currentScope.VarDeclarations.append(.{
             .name = name,
             .type = varType,
@@ -325,7 +325,7 @@ pub const Assignment = struct {
 pub const CompoundAssignment = struct {
     left: Entity,
     right: Entity,
-    id: EntityID,
+    id: ArithmeticExpr.ID,
 
     pub fn new(fnBuilder: *Function.Builder, id: ArithmeticExpr.ID, left: Entity, right: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
@@ -437,5 +437,3 @@ test "IntegerLiteral.new adds multiple IntegerLiterals and returns correct Entit
     try expectEqual(list.items[1].value, value2);
     try expectEqual(list.items[1].isSigned, isSigned2);
 }
-
-pub fn main() !void {}
