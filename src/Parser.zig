@@ -13,7 +13,7 @@ const Scopes = EntityID.Scope;
 const Allocator = std.mem.Allocator;
 const IR = @import("IR.zig");
 
-const Precedence = enum {
+pub const Precedence = enum {
     None,
     Assignment,
     Logical,
@@ -32,7 +32,7 @@ const Precedence = enum {
 pub const IntegerLiteral = struct {
     value: u64,
     isSigned: bool,
-    fn new(list: *ArrayList(IntegerLiteral), value: u64, isSigned: bool, moduleIdx: u64) Entity {
+    pub fn new(list: *ArrayList(IntegerLiteral), value: u64, isSigned: bool, moduleIdx: u64) Entity {
         const idx = list.items.len;
         const id = Entity.new(idx, EntityID.Scope.IntegerLiterals, moduleIdx);
         list.append(.{ .value = value, .isSigned = isSigned }) catch unreachable;
@@ -42,7 +42,7 @@ pub const IntegerLiteral = struct {
 pub const ArrayLiteral = struct {
     elements: []Entity,
     type: Type,
-    fn new(list: *ArrayList(ArrayLiteral), elements: []Entity, moduleIdx: u64) Entity {
+    pub fn new(list: *ArrayList(ArrayLiteral), elements: []Entity, moduleIdx: u64) Entity {
         const idx = list.items.len;
         const id = Entity.new(idx, EntityID.Scope.ArrayLiterals, moduleIdx);
         list.append(.{
@@ -55,7 +55,7 @@ pub const ArrayLiteral = struct {
 pub const ArraySubExpr = struct {
     expr: Entity,
     idx: Entity,
-    fn new(fnBuilder: *Function.Builder, arrayExpr: Entity, arrayIdxExpr: Entity) Entity {
+    pub fn new(fnBuilder: *Function.Builder, arrayExpr: Entity, arrayIdxExpr: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const idx = currentScope.ArraySubExprs.items.len;
@@ -72,7 +72,7 @@ pub const FieldAccessExpr = struct {
     fieldExpr: Entity,
     type: Type,
 
-    fn new(fnBuilder: *Function.Builder, leftExpr: Entity, fieldExpr: Entity) Entity {
+    pub fn new(fnBuilder: *Function.Builder, leftExpr: Entity, fieldExpr: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const idx = currentScope.FieldAccessExpr.items.len;
@@ -93,7 +93,7 @@ pub const StructLiteral = struct {
         initilizers: []Entity,
     },
     type: Type,
-    fn new(list: *ArrayList(StructLiteral), fieldNames: [][]const u8, fieldExpr: []Entity, moduleIdx: u64) Entity {
+    pub fn new(list: *ArrayList(StructLiteral), fieldNames: [][]const u8, fieldExpr: []Entity, moduleIdx: u64) Entity {
         const idx = list.items.len;
         const id = Entity.new(idx, EntityID.Scope.StructLiterals, moduleIdx);
         list.append(.{
@@ -177,7 +177,7 @@ pub const Scope = struct {
         Branches: ArrayList(Branch),
         Parent: Parent,
 
-        pub fn new(allocator: *Allocator, builder: *Function.Builder, parentExpr: Entity, parentScope: Entity) u32 {
+        pub fn new(allocator: *Allocator, builder: *Function.Builder, parentExpr: Entity, parentScope: u32) u32 {
             const last = if (builder.scopeBuilders.items.len == 0) std.mem.zeroes(Entity) else builder.scopeBuilders.items[builder.currentScope].LastLoop;
 
             builder.currentScope = @as(u32, @intCast(builder.scopeBuilders.items.len));
@@ -243,7 +243,7 @@ pub const VarDeclaration = struct {
     name: []const u8,
     type: Type,
 
-    fn new(fnBuilder: *Function.Builder, name: []const u8, varType: Type) Entity {
+    pub fn new(fnBuilder: *Function.Builder, name: []const u8, varType: Type) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const varDeclarationIdx = currentScope.VarDeclaration.items.len;
@@ -270,7 +270,7 @@ pub const ArithmeticExpr = struct {
     left: Entity,
     right: Entity,
     id: ID,
-    const ID = enum(u8) {
+    pub const ID = enum(u8) {
         Add,
         Sub,
         Mul,
@@ -282,7 +282,7 @@ pub const ArithmeticExpr = struct {
 pub const InvokeExpr = struct {
     args: []Entity,
     expr: Entity,
-    fn new(fnBuilder: *Function.Builder, expr: Entity, args: []Entity) Entity {
+    pub fn new(fnBuilder: *Function.Builder, args: []Entity, expr: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const idx = currentScope.Statements.items.len;
@@ -307,7 +307,7 @@ pub fn newIdentifierExpr(fnBuilder: *Function.Builder, name: IdentifierExpr) Ent
 pub const Assignment = struct {
     left: Entity,
     right: Entity,
-    fn new(fnBuilder: *Function.Builder, left: Entity, right: Entity) Entity {
+    pub fn new(fnBuilder: *Function.Builder, left: Entity, right: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const idx = currentScope.Statements.items.len;
@@ -327,7 +327,7 @@ pub const CompoundAssignment = struct {
     right: Entity,
     id: EntityID,
 
-    fn new(fnBuilder: *Function.Builder, id: EntityID, left: Entity, right: Entity) Entity {
+    pub fn new(fnBuilder: *Function.Builder, id: ArithmeticExpr.ID, left: Entity, right: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
 
         const idx = currentScope.Statements.items.len;
@@ -345,7 +345,7 @@ pub const Comparison = struct {
     left: Entity,
     right: Entity,
     id: ID,
-    const ID = enum(u8) {
+    pub const ID = enum(u8) {
         Equal,
         NotEqual,
         LessThan,
@@ -353,7 +353,7 @@ pub const Comparison = struct {
         LessThanOrEqual,
         GreaterThanOrEqual,
     };
-    fn new(fnBuilder: *Function.Builder, id: ID, left: Entity, right: Entity) Entity {
+    pub fn new(fnBuilder: *Function.Builder, id: ID, left: Entity, right: Entity) Entity {
         const currentScope = &fnBuilder.scopeBuilders.items[fnBuilder.currentScope];
         const idx = currentScope.Comparisons.items.len;
         const comparisonId = Entity.new(idx, Scopes.Comparison, fnBuilder.currentScope);
