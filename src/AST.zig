@@ -16,7 +16,7 @@ pub const AST = struct {
     moduleCap: u64,
 
     const Self = @This();
-    fn parse(allocator: *Allocator, sourceFileName: []const u8, target: std.Target) Self {
+    pub fn parse(allocator: *Allocator, sourceFileName: []const u8, target: std.Target) Self {
         const minModuleCount = 8;
         var ast = Self{
             .modules = (allocator.alloc(Module, minModuleCount) catch unreachable).ptr,
@@ -30,7 +30,7 @@ pub const AST = struct {
         return ast;
     }
 
-    fn parseModule(self: *AST, allocator: *Allocator, sourceFile: []const u8, target: std.Target, parentModule: ?Entity) Entity {
+    pub fn parseModule(self: *AST, allocator: *Allocator, sourceFile: []const u8, target: std.Target, parentModule: ?Entity) Entity {
         const moduleIdx = self.moduleLen;
         self.moduleLen += 1;
         _ = target; // leave this out for now
@@ -52,17 +52,17 @@ pub const AST = struct {
             const parentDirName = self.moduleDirs[parentModuleId.getArrayIndex()];
             var parentDirHand = std.fs.openDirAbsolute(parentDirName, .{}) catch unreachable;
             defer parentDirHand.close();
-            const absPath = parentDirHand.realpathAlloc(allocator, sourceFile) catch unreachable;
+            const absPath = parentDirHand.realpathAlloc(allocator.*, sourceFile) catch unreachable;
             self.moduleDirs[moduleIdx] = std.fs.path.dirname(absPath).?;
             const fileHand = std.fs.openFileAbsolute(absPath, .{}) catch unreachable;
             defer fileHand.close();
-            break :blk fileHand.readToEndAlloc(allocator, 0xffffffff) catch unreachable;
+            break :blk fileHand.readToEndAlloc(allocator.*, 0xffffffff) catch unreachable;
         } else blk: {
-            const absPath = std.fs.realpathAlloc(allocator, sourceFile) catch unreachable;
+            const absPath = std.fs.realpathAlloc(allocator.*, sourceFile) catch unreachable;
             self.moduleDirs[moduleIdx] = std.fs.path.dirname(absPath).?;
             const fileHand = std.fs.openFileAbsolute(absPath, .{}) catch unreachable;
             defer fileHand.close();
-            break :blk fileHand.realpathAlloc(allocator, 0xffffffff) catch unreachable;
+            break :blk fileHand.readToEndAlloc(allocator.*, 0xffffffff) catch unreachable;
         };
         const lexer = Lexer.analyze(allocator, fileContent);
         var parser = ParserEngine{ .allocator = allocator, .fnBuilder = undefined, .lexer = .{
@@ -77,16 +77,20 @@ pub const AST = struct {
             .signs = lexer.Signs,
             .operators = lexer.Operators,
         }, .moduleBuilder = .{
-            .internalFns = ArrayList(Parser.Function.Internal).init(allocator),
-            .intLiterals = ArrayList(Parser.IntegerLiteral).init(allocator),
-            .stringLiterals = ArrayList(Parser.StructLiteral).init(allocator),
-            .arrayLiterals = ArrayList(Parser.ArrayLiteral).init(allocator),
-            .unresolvedTypes = ArrayList(Parser.unresolvedTypes).init(allocator),
-            .sliceTypes = ArrayList(Type.Slice).init(allocator),
-            .fnTypes = ArrayList(Type.Function).init(allocator),
-            .arrayTypes = ArrayList(Type.Array).init(allocator),
-            .structTypes = ArrayList(Type.Struct).init(allocator),
-            .libNames = ArrayList([]const u8).init(allocator),
+            .internalFns = ArrayList(Parser.Function.Internal).init(allocator.*),
+            .externalFns = ArrayList(Parser.Function.External).init(allocator.*),
+            .intLiterals = ArrayList(Parser.IntegerLiteral).init(allocator.*),
+            .structLiterals = ArrayList(Parser.StructLiteral).init(allocator.*),
+            .arrayLiterals = ArrayList(Parser.ArrayLiteral).init(allocator.*),
+            .unresolvedTypes = ArrayList([]const u8).init(allocator.*),
+            .sliceTypes = ArrayList(Type.Slice).init(allocator.*),
+            .fnTypes = ArrayList(Type.Function).init(allocator.*),
+            .arrayTypes = ArrayList(Type.Array).init(allocator.*),
+            .structTypes = ArrayList(Type.Struct).init(allocator.*),
+            .libNames = ArrayList([]const u8).init(allocator.*),
+            .importedModules = ArrayList(Parser.ImportedModule).init(allocator.*),
+            .libs = ArrayList(Parser.Lib.Builder).init(allocator.*),
+            .pointerTypes = ArrayList(Type.Pointer).init(allocator.*),
             .idx = @as(u32, @intCast(moduleIdx)),
         } };
 
@@ -114,8 +118,8 @@ pub const AST = struct {
                         const afterConstOp = parser.getAndConsume(.Operator);
                         if (afterConstOp.value == .LeftParen) {
                             const leftParenToken = parser.lexer.tokens[parser.lexer.nextIdx];
-                            var argNameList = ArrayList([]const u8).init(parser.allocator);
-                            var argTypeList = ArrayList(Type).init(parser.allocator);
+                            var argNameList = ArrayList([]const u8).init(parser.allocator.*);
+                            var argTypeList = ArrayList(Type).init(parser.allocator.*);
                             var argsLeft: bool = blk: {
                                 if (leftParenToken == .Operator) {
                                     const leftParenNextOp = parser.getToken(.Operator);
@@ -126,7 +130,8 @@ pub const AST = struct {
                                 break :blk true;
                             };
                             while (argsLeft) {
-                                if (parser.lexer.tokens[parser.lexer.nextIdx] != .Identifier) {
+                                const afterArgToken = parser.lexer.tokens[parser.lexer.nextIdx];
+                                if (afterArgToken != .Identifier) {
                                     std.debug.panic("Expected identifier, Expected argument name, found: {any}", .{parser.lexer.tokens[parser.lexer.nextIdx]});
                                 }
                                 const argName = parser.getAndConsume(.Identifier).value;
@@ -139,12 +144,13 @@ pub const AST = struct {
                                 argNameList.append(argName) catch unreachable;
                                 argTypeList.append(argType) catch unreachable;
 
-                                const afterArgToken = parser.lexer.tokens[parser.lexer.nextIdx];
                                 argsLeft = !(afterArgToken == .Operator and parser.getToken(.Operator).value == .RightParen);
                                 if (argsLeft) {
-                                    if (afterArgToken == .Sign and parser.getToken(.Sign).value == .Comma) {
-                                        parser.consumeToken(.Sign);
-                                        continue;
+                                    if (afterArgToken == .Sign) {
+                                        if (parser.getToken(.Sign).value == ',') {
+                                            parser.consumeToken(.Sign);
+                                            continue;
+                                        }
                                     } else {
                                         std.debug.panic("Expected comma, Expected argument separator, found: {any}", .{afterArgToken});
                                     }
@@ -173,7 +179,7 @@ pub const AST = struct {
                                 const isNotReturn = (attributes & (1 << @intFromEnum(Type.Function.Attribute.noreturn)) >> @intFromEnum(Type.Function.Attribute.noreturn)) != 0;
                                 const hasBody = (attributes & (1 << @intFromEnum(Type.Function.Attribute.@"extern"))) >> @intFromEnum(Type.Function.Attribute.@"extern") == 0;
                                 if (isNotReturn) {
-                                    returnType = Type.Builtin.noReturnType;
+                                    returnType = Type.Builtin.noreturnType;
                                 }
 
                                 const fnType = Type.Function{
@@ -186,10 +192,10 @@ pub const AST = struct {
                                     const fnId = Entity.new(currentFnIdx, EntityId.Module.InternalFn, moduleIdx);
                                     parser.fnBuilder = Parser.Function.Builder{
                                         .currentScope = 0,
-                                        .scopeBuilders = ArrayList(Parser.Scope.Builder).init(allocator),
-                                        .scopes = ArrayList(Parser.Scope).init(allocator),
+                                        .scopeBuilders = ArrayList(Parser.Scope.Builder).init(allocator.*),
+                                        .scopes = ArrayList(Parser.Scope).init(allocator.*),
                                     };
-                                    ParserEngine.parseScope(fnId);
+                                    _ = parser.parseScope(fnId);
                                     parser.moduleBuilder.internalFns.append(Parser.Function.Internal{
                                         .declaration = .{
                                             .argNames = argNameList.items,
@@ -203,18 +209,18 @@ pub const AST = struct {
                                         std.debug.panic("Expected semicolon, Expected end of function declaration, found: {any}", .{parser.lexer.tokens[parser.lexer.nextIdx]});
                                     }
                                     const semiColToken = parser.getAndConsume(.Sign);
-                                    if (semiColToken.value != .Semicolon) {
+                                    if (semiColToken.value != ';') {
                                         std.debug.panic("Expected semicolon, Expected end of function declaration, found: {any}", .{semiColToken});
                                     }
-                                    parser.moduleBuilder.internalFns.append(Parser.Function.External{ .declaration = .{
+                                    parser.moduleBuilder.externalFns.append(Parser.Function.External{ .declaration = .{
                                         .argNames = argNameList.items,
                                         .name = tldName,
                                         .type = fnType,
                                     }, .idx = blk: {
                                         const functionName = tldName;
-                                        for (parser.moduleBuilder.libs.items, 0..) |libName, libIdx| {
+                                        for (parser.moduleBuilder.libNames.items, 0..) |libName, libIdx| {
                                             if (std.mem.eql(u8, libName, functionName)) {
-                                                var symNames = &parser.moduleBuilder.libNames.items[libIdx];
+                                                var symNames = &parser.moduleBuilder.libs.items[libIdx].symbolNames;
                                                 for (symNames.items, 0..) |symName, symIdx| {
                                                     if (std.mem.eql(u8, symName, functionName)) {
                                                         break :blk .{
@@ -235,23 +241,23 @@ pub const AST = struct {
                                         parser.moduleBuilder.libNames.append(externalLibName) catch unreachable;
                                         parser.moduleBuilder.libs.append(.{
                                             .symbolNames = symBlk: {
-                                                var newLibSymNames = ArrayList([]const u8).init(allocator);
+                                                var newLibSymNames = ArrayList([]const u8).init(allocator.*);
                                                 newLibSymNames.append(functionName) catch unreachable;
                                                 break :symBlk newLibSymNames;
                                             },
                                         }) catch unreachable;
                                         const symIdx = 0;
                                         break :blk .{
-                                            .function = @as(symIdx, @intCast(u16)),
+                                            .function = @as(u16, @intCast(symIdx)),
                                             .library = @as(u16, @intCast(libIdx)),
                                         };
                                     } }) catch unreachable;
                                 }
                             }
-                        } else if (afterConstOp == .Keyword) {
-                            const keyword = parser.getAndConsume(.Keyword).value;
+                        } else if (afterConstToken == .Keyword) {
+                            const keyword = parser.getAndConsume(.Keyword);
                             if (keyword.value == .@"struct") {
-                                parser.parseStruct(tldName);
+                                _ = parser.parseStruct(tldName);
                             } else {
                                 unreachable;
                             }
@@ -278,6 +284,9 @@ pub const AST = struct {
             .structTypes = parser.moduleBuilder.structTypes.items,
             .unresolvedTypes = parser.moduleBuilder.unresolvedTypes.items,
             .arrayLiterals = parser.moduleBuilder.arrayLiterals.items,
+            .pointerTypes = parser.moduleBuilder.pointerTypes.items,
+            .importedModules = parser.moduleBuilder.importedModules.items,
+            .libs = parser.moduleBuilder.libs.items,
         };
         self.moduleNames[moduleIdx] = sourceFile;
         return moduleId;
