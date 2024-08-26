@@ -70,7 +70,7 @@ pub const ParserEngine = struct {
             .Mul => Parser.ArithmeticExpr.ID.Mul,
             .Div => Parser.ArithmeticExpr.ID.Div,
             .Mod => Parser.ArithmeticExpr.ID.Mod,
-            else => std.debug.panic("Invalid operator"),
+            else => std.debug.panic("Invalid operator", .{}),
         };
 
         const rightExpr = self.parsePrecedence(@as(Precedence, @enumFromInt(@intFromEnum(precedence) + 1)));
@@ -117,7 +117,7 @@ pub const ParserEngine = struct {
                 else => std.debug.panic("Invalid token {any}", .{prefix}),
             }
         };
-        return self.parseInfix(leftExpr, precedence);
+        return self.parseInfix(precedence, leftExpr);
     }
 
     fn parsePrefixIdentifier(self: *Self) Entity {
@@ -135,7 +135,7 @@ pub const ParserEngine = struct {
                     const sign = self.getToken(.Sign);
                     const signPrecedence = switch (sign.value) {
                         '{', '}', ';', ',' => Precedence.None,
-                        else => std.debug.panic("Invalid precedence!"),
+                        else => std.debug.panic("Invalid precedence!", .{}),
                     };
                     break :signBlk signPrecedence;
                 },
@@ -145,11 +145,11 @@ pub const ParserEngine = struct {
                         .RightParen, .RightBracket => Precedence.None,
                         .Plus, .Minus => Precedence.LightArithmetic,
                         .Mul, .Div, .Mod => Precedence.HeavyArithmetic,
-                        .Equal, .GreaterThan, .LessThan, .GreaterThanOrEqual, .LessThanOrEqual, .NotEqual => Precedence.Comparison,
+                        .Equal, .GreaterThan, .LessThan, .GreaterThanEqual, .LessThanEqual, .NotEqual => Precedence.Comparison,
                         .Assignment => Precedence.Assignment,
                         .Declaration => Precedence.Declaration,
                         .LeftParen, .LeftBracket => Precedence.Call,
-                        else => std.debug.panic("Invalid precedence!"),
+                        else => std.debug.panic("Invalid precedence!", .{}),
                     };
                     break :operatorBlk operatorPrecedence;
                 },
@@ -160,18 +160,12 @@ pub const ParserEngine = struct {
             if (hasLessPrecedence) {
                 const op = self.getAndConsume(.Operator).value;
                 leftExpr = switch (op) {
-                    .Equal, .GreaterThan, .LessThan, .GreaterThanOrEqual, .LessThanOrEqual, .NotEqual => {
-                        self.parseComparison(leftExpr, op, newPrecedence);
-                    },
-                    .Plus, .Minus, .Mul, .Div, .Mod => {
-                        self.parseArithmeticExpr(leftExpr, op, newPrecedence);
-                    },
-                    .Assignment => {
-                        self.parseAssignment(leftExpr, newPrecedence);
-                    },
+                    .Equal, .GreaterThan, .LessThan, .GreaterThanEqual, .LessThanEqual, .NotEqual => self.parseComparison(leftExpr, op, newPrecedence),
+                    .Plus, .Minus, .Mul, .Div, .Mod => self.parseArithmeticExpr(leftExpr, op, newPrecedence),
+                    .Assignment => self.parseAssignment(leftExpr, newPrecedence),
                     .LeftParen => blk: {
                         var argsLeftToParse = self.lexer.tokens[self.lexer.nextIdx] != .Operator or self.getToken(.Operator).value != .RightParen;
-                        var argsList = ArrayList(Entity).init(self.allocator);
+                        var argsList = ArrayList(Entity).init(self.allocator.*);
 
                         while (argsLeftToParse) {
                             const argId = self.parseExpr();
@@ -199,7 +193,7 @@ pub const ParserEngine = struct {
                     .LeftBracket => blk: {
                         const arrayExpr = leftExpr;
                         const arrayIdxExpr = self.parseExpr();
-                        if (self.lexer.tokens[self.lexer.nextIdx] != .Operator and self.getToken(.Operator).value != Operator.ID.RightBracket) {
+                        if (self.lexer.tokens[self.lexer.nextIdx] != .Operator and self.getToken(.Operator).value != .RightBracket) {
                             std.debug.panic("Expected right bracket after Aray subscription", .{});
                         }
                         break :blk Parser.ArraySubExpr.new(&self.fnBuilder, arrayExpr, arrayIdxExpr);
@@ -217,10 +211,10 @@ pub const ParserEngine = struct {
             .Equal => Parser.Comparison.ID.Equal,
             .GreaterThan => Parser.Comparison.ID.GreaterThan,
             .LessThan => Parser.Comparison.ID.LessThan,
-            .GreaterThanOrEqual => Parser.Comparison.ID.GreaterThanOrEqual,
-            .LessThanOrEqual => Parser.Comparison.ID.LessThanOrEqual,
+            .GreaterThanEqual => Parser.Comparison.ID.GreaterThanOrEqual,
+            .LessThanEqual => Parser.Comparison.ID.LessThanOrEqual,
             .NotEqual => Parser.Comparison.ID.NotEqual,
-            else => std.debug.panic("Invalid operator"),
+            else => std.debug.panic("Invalid operator", .{}),
         };
         const rightExpr = self.parsePrecedence(@as(Precedence, @enumFromInt(@intFromEnum(precedence) + 1)));
         return Parser.Comparison.new(&self.fnBuilder, compId, leftExpr, rightExpr);
@@ -237,13 +231,13 @@ pub const ParserEngine = struct {
 
     fn parseArrayLiteral(self: *Self) Entity {
         var rightBracketFound = false;
-        var arrayLiteralExprList = ArrayList(Entity).init(self.allocator);
+        var arrayLiteralExprList = ArrayList(Entity).init(self.allocator.*);
 
         while (!rightBracketFound) {
             arrayLiteralExprList.append(self.parseExpr()) catch unreachable;
             const nextToken = self.lexer.tokens[self.lexer.nextIdx];
 
-            if (nextToken == .Operator and self.getToken(.Operator).value == Operator.ID.RightBracket) {
+            if (nextToken == .Operator and self.getToken(.Operator).value == .RightBracket) {
                 rightBracketFound = true;
                 self.consumeToken(.Operator);
             } else if (nextToken != .Sign or self.getToken(.Sign).value != ',') {
@@ -257,8 +251,8 @@ pub const ParserEngine = struct {
     }
 
     fn parseStructLiteral(self: *Self) Entity {
-        var fieldIdentifiers = ArrayList(Parser.IdentifierExpr).init(self.allocator);
-        var fieldExprs = ArrayList(Entity).init(self.allocator);
+        var fieldIdentifiers = ArrayList(Parser.IdentifierExpr).init(self.allocator.*);
+        var fieldExprs = ArrayList(Entity).init(self.allocator.*);
 
         // Note: empty struct are not allowed for now
         if (self.lexer.tokens[self.lexer.nextIdx] == .Sign and self.getToken(.Sign).value == '}') {
@@ -267,13 +261,13 @@ pub const ParserEngine = struct {
 
         while (true) {
             if (self.lexer.tokens[self.lexer.nextIdx] != .Operator) std.debug.panic("Expected Dot operator but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
-            if (self.getAndConsume(.Operator).value != Operator.ID.Dot) std.debug.panic("Expected Dot operator to initialize struct fields but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
+            if (self.getAndConsume(.Operator).value != .Dot) std.debug.panic("Expected Dot operator to initialize struct fields but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
             if (self.lexer.tokens[self.lexer.nextIdx] != .Identifier) std.debug.panic("Expected Identifier but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
 
             const fieldIdentifier = self.getAndConsume(.Identifier).value;
             fieldIdentifiers.append(fieldIdentifier) catch unreachable;
 
-            if (self.lexer.tokens[self.lexer.nextIdx] != .Operator or self.getToken(.Operator).value != Operator.ID.Assignment) {
+            if (self.lexer.tokens[self.lexer.nextIdx] != .Operator or self.getToken(.Operator).value != .Assignment) {
                 std.debug.panic("Expected Assignment operator but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
             }
 
@@ -282,11 +276,11 @@ pub const ParserEngine = struct {
 
             if (self.lexer.tokens[self.lexer.nextIdx] != .Sign) std.debug.panic("Expected comma or right brace found {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
 
-            const afterFieldSign = self.getAndConsume(.sign) catch unreachable;
+            const afterFieldSign = self.getAndConsume(.Sign);
             if (afterFieldSign.value == '}') break;
             if (afterFieldSign.value != ',') std.debug.panic("Expected comma or right brace found {any}", .{afterFieldSign.value});
         }
-        return Parser.StructLiteral.new(&self.moduleBuilder.structLiterals, fieldIdentifiers.items, self.moduleBuilder.idx);
+        return Parser.StructLiteral.new(&self.moduleBuilder.structLiterals, fieldIdentifiers.items, fieldExprs.items, self.moduleBuilder.idx);
     }
 
     fn parseStatement(self: *Self, parentScope: u32) void {
@@ -304,10 +298,10 @@ pub const ParserEngine = struct {
                     const afterDeclarationToken = self.lexer.tokens[self.lexer.nextIdx];
 
                     if (afterDeclarationToken == .Operator) {
-                        if (self.getToken(.Operator).value == Operator.ID.Assignment) {
+                        if (self.getToken(.Operator).value == .Assignment) {
                             self.consumeToken(.Operator);
                             const initilaizerExpr = self.parseExpr();
-                            const assignmentIdx = currentScope.AssignmentExprs.items.len;
+                            const assignmentIdx = currentScope.Assignments.items.len;
                             currentScope.Assignments.append(.{
                                 .left = varDeclarationId,
                                 .right = initilaizerExpr,
@@ -412,7 +406,7 @@ pub const ParserEngine = struct {
                                 else => std.debug.panic("Expected integer literal but got {any}", .{rightToken}),
                             }
                         };
-                        const prefixComp = Parser.Comparison.new(&self.fnBuilder, Parser.Comparison.ID.LessThan, iterationDeclaration, rightExpr);
+                        const prefixComp = Parser.Comparison.new(&self.fnBuilder, .LessThan, iterationDeclaration, rightExpr);
 
                         currentScope.Statements.append(prefixComp) catch unreachable;
                         self.endScope(prefixScopeIdx);
@@ -420,7 +414,7 @@ pub const ParserEngine = struct {
 
                         const postScopeIdx = Parser.Scope.Builder.new(self.allocator, &self.fnBuilder, loopId, parentScope);
                         const postIncrementValue = Parser.IntegerLiteral.new(&self.moduleBuilder.intLiterals, 1, false, self.moduleBuilder.idx);
-                        const postCompoundAssignment = Parser.CompoundAssignment.new(&self.fnBuilder, Parser.ArithmeticExpr.ID.Add, postIncrementValue, Parser.ArithmeticExpr.ID.Add);
+                        const postCompoundAssignment = Parser.CompoundAssignment.new(&self.fnBuilder, .Add, iterationDeclaration, postIncrementValue);
 
                         self.fnBuilder.scopeBuilders.items[postScopeIdx].Statements.append(postCompoundAssignment) catch unreachable;
                         self.endScope(postScopeIdx);
@@ -441,11 +435,11 @@ pub const ParserEngine = struct {
                         var scope = &self.fnBuilder.scopeBuilders.items[parentScope];
                         const lastLoop = scope.LastLoop;
 
-                        if (lastLoop.value == std.mem.zeros(Entity).value) {
+                        if (lastLoop.value == std.mem.zeroes(Entity).value) {
                             std.debug.panic("Break statement outside of loop", .{});
                         }
 
-                        const breakExprIdx = EntityID.Scope.BreakExpr.items.len;
+                        const breakExprIdx = scope.BreakExprs.items.len;
                         const breakExprId = Entity.new(breakExprIdx, EntityID.Scope.BreakExpr, self.fnBuilder.currentScope);
 
                         const breakExpr = Parser.BreakExpr{
@@ -461,7 +455,7 @@ pub const ParserEngine = struct {
             else => std.debug.panic("Invalid token {any}", .{nextToken}),
         }
 
-        if (self.lexer.tokens[self.lexer.nextId] == .Sign and self.getToken(.Sign).value == ';') {
+        if (self.lexer.tokens[self.lexer.nextIdx] == .Sign and self.getToken(.Sign).value == ';') {
             self.consumeToken(.Sign);
             return;
         } else {
@@ -473,16 +467,16 @@ pub const ParserEngine = struct {
         return self.parseInfix(Precedence.Assignment, self.parsePrefixIdentifier());
     }
 
-    fn parseType(self: *Self) Type {
+    pub fn parseType(self: *Self) Type {
         switch (self.lexer.tokens[self.lexer.nextIdx]) {
-            .Identifier => return self.addUnresolvedType(self.lexer.tokens[self.lexer.nextIdx].value),
+            .Identifier => return self.addUnresolvedType(self.getAndConsume(.Identifier).value),
             .Operator => {
-                switch (self.getAndConsume(.Operator)) {
+                switch (self.getAndConsume(.Operator).value) {
                     .LeftBracket => {
                         const arrayTypeIdx = self.moduleBuilder.arrayTypes.items.len;
                         const arrayLen = self.parseExpr();
 
-                        if (self.lexer.tokens[self.lexer.nextId] != .Operator and self.getAndConsume(.Operator).value != Operator.ID.RightBracket) {
+                        if (self.lexer.tokens[self.lexer.nextIdx] != .Operator and self.getAndConsume(.Operator).value != .RightBracket) {
                             std.debug.panic("Expected right bracket but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
                         }
 
@@ -504,23 +498,24 @@ pub const ParserEngine = struct {
 
     fn addUnresolvedType(self: *Self, typeIdentifier: []const u8) Type {
         for (self.moduleBuilder.unresolvedTypes.items, 0..) |unresolvedType, idx| {
-            if (std.mem.eql(u8, unresolvedType.name, typeIdentifier)) {
+            if (std.mem.eql(u8, unresolvedType, typeIdentifier)) {
                 return Type.newUnresolvedType(idx, self.moduleBuilder.idx);
             }
         }
+
         self.moduleBuilder.unresolvedTypes.append(typeIdentifier) catch unreachable;
         return Type.newUnresolvedType(self.moduleBuilder.unresolvedTypes.items.len, self.moduleBuilder.idx);
     }
 
     pub fn parseStruct(self: *Self, name: []const u8) Type {
         if (self.lexer.tokens[self.lexer.nextIdx] != .Sign and self.getToken(.sign).value != '{') {
-            std.debug.panic("Expected left brace for struct declaration but got {any}", .{self.lexer.tokens[self.lexer.nextId]});
+            std.debug.panic("Expected left brace for struct declaration but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
         }
 
-        self.consumeToken(.sign);
+        self.consumeToken(.Sign);
 
-        var fieldTypes = ArrayList(Type).init(self.allocator);
-        var fieldNames = ArrayList([]const u8).init(self.allocator);
+        var fieldTypes = ArrayList(Type).init(self.allocator.*);
+        var fieldNames = ArrayList([]const u8).init(self.allocator.*);
 
         while (true) {
             if (self.lexer.tokens[self.lexer.nextIdx] != .Identifier) {
@@ -565,13 +560,13 @@ pub const ParserEngine = struct {
     }
     pub fn parseScope(self: *Self, parentExpr: Entity) u32 {
         const prevScope = self.fnBuilder.currentScope;
-        const newScope = Parser.Scope.new(self.allocator, &self.fnBuilder, parentExpr, prevScope);
+        const newScope = Parser.Scope.Builder.new(self.allocator, &self.fnBuilder, parentExpr, prevScope);
 
         const parentExprId = parentExpr.getArrayId(.scope);
         const scopeNotAllowed = parentExprId == .Loops or parentExprId == .Branches;
 
         if (scopeNotAllowed) {
-            if (self.lexer.tokens[self.lexer.nextId] == .Sign and self.getToken(.Sign).value == '{') {
+            if (self.lexer.tokens[self.lexer.nextIdx] == .Sign and self.getToken(.Sign).value == '{') {
                 self.processScope(newScope);
             } else {
                 self.parseStatement(newScope);
@@ -609,8 +604,8 @@ pub const ParserEngine = struct {
         self.fnBuilder.scopes.items[scopeIdx] = .{
             .Statements = scopeBuilder.Statements.items,
             .VarDeclaration = scopeBuilder.VarDeclarations.items,
-            .AssignmentExprs = scopeBuilder.Assignments.items,
-            .CompoundAssignmentExprs = scopeBuilder.CompoundAssignments.items,
+            .Assignment = scopeBuilder.Assignments.items,
+            .CompoundAssignment = scopeBuilder.CompoundAssignments.items,
             .Comparison = scopeBuilder.Comparisons.items,
             .BreakExpr = scopeBuilder.BreakExprs.items,
             .ReturnExpr = scopeBuilder.ReturnExprs.items,
@@ -618,8 +613,8 @@ pub const ParserEngine = struct {
             .IdentifierExpr = scopeBuilder.IdentifierExpr.items,
             .ArithmeticExpr = scopeBuilder.ArithmeticExprs.items,
             .ArraySubExpr = scopeBuilder.ArraySubExprs.items,
-            .FieldAccessExpr = scopeBuilder.FieldAccessExprs.items,
-            .Loops = scopeBuilder.Loops.items,
+            .FieldAccessExpr = scopeBuilder.FieldAccessExpr.items,
+            .Loop = scopeBuilder.Loops.items,
             .Branches = scopeBuilder.Branches.items,
             .Parent = scopeBuilder.Parent,
         };
