@@ -84,7 +84,7 @@ pub const Array = struct {
     exprLen: u64,
     type: Type,
 
-    fn new(idx: u64, moduleIdx: u64) Type {
+    pub fn new(idx: u64, moduleIdx: u64) Type {
         return constructTypeValue(Type.ID.Array, moduleIdx, idx);
     }
 };
