@@ -10,7 +10,7 @@ pub const Operator = packed struct {
     line: u64,
     column: u64,
     value: ID,
-    const ID = enum(u8) {
+    pub const ID = enum(u8) {
         Declaration,
         LeftParen,
         RightParen,
@@ -135,18 +135,18 @@ pub const Lexer = struct {
         LineCount: u64,
     };
 
-    pub fn analyze(allocator: Allocator, src: []const u8) Lexems {
+    pub fn analyze(allocator: *Allocator, src: []const u8) Lexems {
         var tokenizer = Tokenizer{
             .currentIdx = 0,
             .LineCount = 0,
-            .tokens = ArrayList(Token).init(allocator),
-            .IntLiterals = ArrayList(IntLiteral).init(allocator),
-            .CharLiterals = ArrayList(CharLiteral).init(allocator),
-            .StringLiterals = ArrayList(StringLiteral).init(allocator),
-            .Identifiers = ArrayList(Identifier).init(allocator),
-            .Keywords = ArrayList(Keyword).init(allocator),
-            .Signs = ArrayList(Sign).init(allocator),
-            .Operators = ArrayList(Operator).init(allocator),
+            .tokens = ArrayList(Token).init(allocator.*),
+            .IntLiterals = ArrayList(IntLiteral).init(allocator.*),
+            .CharLiterals = ArrayList(CharLiteral).init(allocator.*),
+            .StringLiterals = ArrayList(StringLiteral).init(allocator.*),
+            .Identifiers = ArrayList(Identifier).init(allocator.*),
+            .Keywords = ArrayList(Keyword).init(allocator.*),
+            .Signs = ArrayList(Sign).init(allocator.*),
+            .Operators = ArrayList(Operator).init(allocator.*),
         };
 
         var currentLineStart: u64 = 0;
@@ -585,8 +585,8 @@ pub const Lexer = struct {
 
 test "Lexer" {
     const src = "struct { \n return ; \n }";
-    const allocator = std.heap.page_allocator;
-    const lexems = Lexer.analyze(allocator, src);
+    var allocator = std.heap.page_allocator;
+    const lexems = Lexer.analyze(&allocator, src);
     // print("LEXEMS: {any}", .{lexems});
 
     try testing.expectEqual(lexems.LineCount, 3);
@@ -594,8 +594,8 @@ test "Lexer" {
 }
 test "Lexer string" {
     const src = "const a = \"Hey mom\";";
-    const allocator = std.heap.page_allocator;
-    const lexems = Lexer.analyze(allocator, src);
+    var allocator = std.heap.page_allocator;
+    const lexems = Lexer.analyze(&allocator, src);
     try testing.expectEqual(lexems.LineCount, 1);
     try testing.expectEqualStrings(lexems.StringLiterals[0].value, "Hey mom");
     try testing.expectEqual(lexems.StringLiterals[0].start, 11);
