@@ -1,9 +1,9 @@
 const std = @import("std");
 const ArrayList = std.ArrayList;
-
-const Function = @import("Parser.zig").Function;
 const Type = @import("Type.zig");
 const Parser = @import("Parser.zig");
+const Function = Parser.Function;
+
 pub const Module = struct {
     internalFns: []Function.Internal,
     externalFns: []Function.External,
@@ -13,7 +13,7 @@ pub const Module = struct {
     arrayLiterals: []Parser.ArrayLiteral,
     unresolvedTypes: [][]const u8,
     sliceTypes: []Type.Slice,
-    fnTypes: Type.Function,
+    fnTypes: []Type.Function,
     arrayTypes: []Type.Array,
     structTypes: []Type.Struct,
     pointerTypes: []Type.Pointer,
