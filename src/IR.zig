@@ -43,7 +43,7 @@ pub const Ref = struct {
     const T = u64;
     value: T,
 
-    pub const Null = std.mem.zeroes(T);
+    pub const Null = std.mem.zeroes(Ref);
 
     pub const ID = enum(u8) {
         None,
