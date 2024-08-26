@@ -35,9 +35,9 @@ pub const ParserEngine = struct {
         operators: []Lexer.Operator,
     };
 
-    pub fn getToken(self: *Self, comptime token: Lexer.Token) TokenTypeMap[@intFromEnum(token)] {
+    pub inline fn getToken(self: *Self, comptime token: Lexer.Token) TokenTypeMap[@intFromEnum(token)] {
         const idx = self.lexer.counters[@intFromEnum(token)];
-        comptime switch (token) {
+        switch (token) {
             .IntLiteral => return self.lexer.intLiterals[idx],
             .CharLiteral => return self.lexer.charLiterals[idx],
             .StringLiteral => return self.lexer.stringLiterals[idx],
@@ -46,7 +46,7 @@ pub const ParserEngine = struct {
             .Sign => return self.lexer.signs[idx],
             .Operator => return self.lexer.operators[idx],
             else => unreachable,
-        };
+        }
     }
     // I'm probably overusing the `comptime` kw, I'll figure it out later
     pub fn consumeToken(self: *Self, comptime token: Lexer.Token) void {
