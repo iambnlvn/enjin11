@@ -41,7 +41,7 @@ pub const Formatter = struct {
         id: u32,
     };
 
-    fn new(allocator: *Allocator, builder: *Program.Builder) void {
+    pub fn new(allocator: *Allocator, builder: *Program.Builder) void {
         const formatter = Formatter{
             .allocator = allocator,
             .builder = builder,

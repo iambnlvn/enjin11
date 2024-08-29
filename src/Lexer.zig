@@ -582,10 +582,11 @@ pub const Lexer = struct {
         }
     }
 };
-
+// Todo: this causes a memory leak, need a way to deinit the tokenizer that is initialized in the Lexer.analyze
+// Note: it also should be done from the outside, not from the inside of the Lexer.analyze
 test "Lexer" {
     const src = "struct { \n return ; \n }";
-    var allocator = std.heap.page_allocator;
+    var allocator = std.testing.allocator;
     const lexems = Lexer.analyze(&allocator, src);
     // print("LEXEMS: {any}", .{lexems});
 
@@ -594,7 +595,7 @@ test "Lexer" {
 }
 test "Lexer string" {
     const src = "const a = \"Hey mom\";";
-    var allocator = std.heap.page_allocator;
+    var allocator = std.testing.allocator;
     const lexems = Lexer.analyze(&allocator, src);
     try testing.expectEqual(lexems.LineCount, 1);
     try testing.expectEqualStrings(lexems.StringLiterals[0].value, "Hey mom");

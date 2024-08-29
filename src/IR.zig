@@ -8,6 +8,7 @@ const Instruction = @import("Instruction.zig").Instruction;
 const Semantics = @import("Sem.zig");
 const Entity = @import("Entity.zig").Entity;
 const Level = @import("EntityID.zig").ID;
+const Formatter = @import("Formatter.zig").Formatter;
 
 pub const Constant = struct {
     pub const ID = enum(u8) {
@@ -192,13 +193,14 @@ pub const Program = struct {
     functionTypes: []Type.Function,
     arrayTypes: []Type.Array,
     structTypes: []Type.Struct,
+    pointerTypes: []Type.Pointer,
+    sliceTypes: []Type.Slice,
     integerLiterals: []Parser.IntegerLiteral,
-    instructionReferences: [Instruction.count][]refList,
     arrayLiterals: []Parser.ArrayLiteral,
     structLiterals: []Parser.StructLiteral,
+    instructionReferences: [Instruction.count][]refList,
     external: Semantics.External,
     basicBlocks: []BasicBlock,
-    pointerTypes: []Type.Pointer,
 
     pub fn getBlockFnIdx(self: *const Program, blockIdx: u32) u32 {
         return &self.basicBlocks[blockIdx].fnIdx;
@@ -803,6 +805,44 @@ pub const Program = struct {
                 else => std.debug.panic("Unsupported comparison"),
             };
             return Instruction.Icmp.new(allocator, self, compId, left, right);
+        }
+
+        pub fn introspectForAlloc(self: *Self, func: *const Parser.Function.Internal, scopeIdx: u32) bool {
+            var scope = func.scopes[scopeIdx];
+
+            for (scope.statements) |statement| {
+                const statementId = statement.getArrayId(.Scope);
+                if (statementId == .ReturnExpr) {
+                    return true;
+                } else if (statementId == .Branches) {
+                    if (self.introspectBranchForAlloc(func, scopeIdx, statement)) return true;
+                } else if (statementId == .Loops) {
+                    if (self.introspectForLoopAlloc(func, scopeIdx, statement)) return true;
+                }
+            }
+            return false;
+        }
+
+        pub fn introspectBranchForAlloc(self: *Self, func: *const Parser.Function.Internal, scopeIdx: u32, branchExpr: Entity) bool {
+            var scope = func.scopes[scopeIdx];
+            const branch = &scope.Branches[branchExpr.getIdx()];
+
+            if (self.introspectForAlloc(func, branch.ifScope)) return true;
+
+            if (branch.elseScope) {
+                if (self.introspectForAlloc(func, branch.elseScope.?)) return true;
+            }
+            return false;
+        }
+
+        pub fn introspectForLoopAlloc(self: *Self, func: *const Parser.Function.Internal, scopeIdx: u32, loopExpr: Entity) bool {
+            var scope = func.scopes[scopeIdx];
+            const loop = &scope.Loop[loopExpr.getIdx()];
+
+            if (self.introspectForAlloc(func, loop.prefixScopeIdx)) return true;
+            if (self.introspectForAlloc(func, loop.bodyScopeIdx)) return true;
+            if (self.introspectForAlloc(func, loop.postfixScopeIdx)) return true;
+            return false;
         }
     };
 };
