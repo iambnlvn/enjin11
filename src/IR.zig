@@ -846,3 +846,138 @@ pub const Program = struct {
         }
     };
 };
+
+const Ret = enum {
+    void,
+    noreturn,
+    any,
+};
+
+pub fn gen(allocator: *Allocator, res: Semantics.Result) Program {
+    var builder = Program.Builder.new(allocator.*, res);
+
+    for (res.functions, 0..) |*fnAst, fnAStIdx| {
+        const fnType = fnAst.declaration.type;
+
+        builder.currentFunction = @as(u32, @intCast(fnAStIdx));
+        var fnBuilder = &builder.functionBuilders.items[builder.currentFunction];
+
+        fnBuilder.currentBlock = BasicBlock.new(allocator.*, &builder);
+        builder.appendBlock2CurrentFn(fnBuilder.currentBlock, 0);
+
+        const returnType = fnType.returnType;
+
+        const returnValue = blk: {
+            if (returnType.getId() == .Builtin) {
+                if (returnType.value == Type.Builtin.voidType.value) {
+                    break :blk Ret.void;
+                } else if (returnType.value == Type.Builtin.noreturnType) {
+                    break :blk Ret.noreturn;
+                } else {
+                    unreachable;
+                }
+            } else {
+                break :blk Ret.any;
+            }
+        };
+
+        for (fnAst.scopes[0].statements) |statement| {
+            const statementId = statement.getArrayId(.Scope);
+            if (statementId == .Branches) {
+                if (builder.introspectBranchForAlloc(fnAst, 0, statement)) {
+                    fnBuilder.isExplicitReturn = true;
+                    break;
+                }
+            } else if (statementId == .Loops) {
+                if (builder.introspectForLoopAlloc(fnAst, 0, statement)) {
+                    fnBuilder.isExplicitReturn = true;
+                    break;
+                }
+            }
+        }
+
+        fnBuilder.isConditionalAlloca = returnValue == .any and fnBuilder.isExplicitReturn;
+
+        if (fnBuilder.isExplicitReturn) {
+            fnBuilder.exitBlock = BasicBlock.new(allocator.*, &builder);
+            if (fnBuilder.isConditionalAlloca) {
+                fnBuilder.returnAlloca = Instruction.Alloc.new(allocator.*, &builder, Ref.Null, returnType, null);
+            }
+        }
+
+        for (fnType.argTypes, 0..) |argType, argTypeIdx| {
+            const argRef = Function.Arg.new(@as(u32, @intCast(argTypeIdx)));
+            const argAlloc = Instruction.Alloc.new(allocator.*, &builder, argRef, argType, null);
+            fnBuilder.argAlloca.append(argAlloc) catch unreachable;
+
+            _ = Instruction.Store.new(allocator, &builder, argRef, argAlloc, argType);
+        }
+        builder.processScope(allocator.*, fnBuilder, 0, res, fnBuilder.currentBlock);
+
+        if (fnBuilder.isConditionalAlloca) {
+            builder.appendBlock2CurrentFn(fnBuilder.exitBlock, null);
+            fnBuilder.currentBlock = fnBuilder.exitBlock;
+
+            const returnAlloc = builder.instructions.alloc.items[fnBuilder.returnAlloca.getIDX()];
+            const returnAllocType = returnAlloc.baseType;
+            const loadedReturn = Instruction.Load.new(allocator.*, &builder, returnAllocType, fnBuilder.returnAlloca);
+
+            _ = Instruction.Ret.new(allocator, &builder, returnAllocType, loadedReturn);
+        } else if (returnValue == .void) {
+            if (fnBuilder.isEmittedReturn) {
+                _ = Instruction.Ret.new(allocator, &builder, returnType, null);
+            }
+            if (fnBuilder.isExplicitReturn) {
+                unreachable;
+            }
+        }
+    }
+
+    var functions = ArrayList(Function).initCapacity(allocator.*, res.functions.len) catch unreachable;
+    for (builder.fnBuilders.items) |fnb| {
+        functions.append(.{
+            .Declaration = fnb.declaration,
+            .basicBlocs = fnb.basicBlocs.items,
+            .argAlloca = fnb.argAlloca.items,
+        }) catch unreachable;
+    }
+
+    Formatter.new(allocator.*, &builder);
+
+    const ir = Program{
+        .instructions = .{
+            .add = builder.instructions.add.items,
+            .sub = builder.instructions.sub.items,
+            .mul = builder.instructions.mul.items,
+            .load = builder.instructions.load.items,
+            .store = builder.instructions.store.items,
+            .memCopy = builder.instructions.memCopy.items,
+            .call = builder.instructions.call.items,
+            .ret = builder.instructions.ret.items,
+            .br = builder.instructions.br.items,
+            .icmp = builder.instructions.icmp.items,
+            .alloc = builder.instructions.alloc.items,
+            .gep = builder.instructions.gep.items,
+        },
+        .functions = functions.items,
+        .functionTypes = builder.functionTypes.items,
+        .arrayTypes = builder.arrayTypes.items,
+        .structTypes = builder.structTypes.items,
+        .sliceTypes = builder.sliceTypes.items,
+        .integerLiterals = builder.integerLiterals.items,
+        .arrayLiterals = builder.arrayLiterals.items,
+        .structLiterals = builder.structLiterals.items,
+        .external = builder.external,
+        .basicBlocks = builder.basicBlocks.items,
+        .pointerTypes = builder.pointerTypes.items,
+
+        .instructionReferences = blk: {
+            var refs: [Instruction.count][]refList = undefined;
+            for (builder.instructionReferences, 0..) |ref, refIdx| {
+                refs[refIdx] = ref.items;
+            }
+            break :blk refs;
+        },
+    };
+    return ir;
+}
