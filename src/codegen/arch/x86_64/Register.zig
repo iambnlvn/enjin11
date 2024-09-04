@@ -1,5 +1,7 @@
 const std = @import("std");
 const IR = @import("./../../../IR.zig");
+const Instruction = @import("./../../../Instruction.zig").Instruction;
+const panic = std.debug.panic;
 
 const Indirect = struct {
     ref: IR.Ref,
@@ -167,7 +169,7 @@ const Register = extern union {
                 }
             }
 
-            std.debug.panic("Couldn't allocate register", .{});
+            panic("Couldn't allocate register", .{});
         }
 
         fn allocateIndirect(self: *Self, ref: IR.Ref, offset: i32, size: u32) Indirect {
@@ -191,7 +193,7 @@ const Register = extern union {
                 }
             }
 
-            std.debug.panic("No free registers", .{});
+            panic("No free registers", .{});
         }
 
         // This seems to be a good approach to allocate registers but too much code for a basic functionality
@@ -230,7 +232,7 @@ const Register = extern union {
         //         }
         //     }
 
-        //     std.debug.panic("No free registers", .{});
+        //     panic("No free registers", .{});
         // }
 
         // fn allocateDirect(self: *Self, value: IR.Ref, regSize: u8) Direct {
@@ -252,14 +254,14 @@ const Register = extern union {
         //             return idx;
         //         }
         //     }
-        //     std.debug.panic("No registers have been allocated", .{});
+        //     panic("No registers have been allocated", .{});
         // }
 
         fn allocateArg(self: *Self, argIdx: u32, size: u8) Direct {
             const targetRegister = self.argRegisters[argIdx];
             var occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
 
-            if (occupation == .None) {
+            if (occupation.* == .None) {
                 occupation.* = .Direct;
 
                 var reg = &self.state.registers.array[@intFromEnum(targetRegister)];
@@ -275,7 +277,98 @@ const Register = extern union {
                 return reg.direct;
             }
 
-            std.debug.panic("Register already occupied or not ready for use", .{});
+            panic("Register already occupied or not ready for use", .{});
         }
+
+        fn allocateCallArg(self: *Self, argIdx: u32, arg: IR.Ref, size: u8) Direct {
+            const targetRegister = self.argRegisters[argIdx];
+
+            var occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
+
+            if (occupation.* == .None) {
+                occupation.* = .Direct;
+
+                var reg = &self.state.registers.array[@intFromEnum(targetRegister)];
+                reg.* = .{
+                    .direct = Direct{
+                        .ref = arg,
+                        .size = size,
+                        .modifier = 0,
+                        .register = targetRegister,
+                    },
+                };
+
+                return reg.direct;
+            }
+
+            panic("No arg registers available or ready", .{});
+        }
+
+        fn allocateReturn(self: *Self, ref: IR.Ref, size: u8) Direct {
+            const regA = @intFromEnum(Register.ID.A);
+            const occupation = &self.state.occupation.byType.legacy[regA];
+
+            if (occupation.* == .None) {
+                occupation.* = .Direct;
+
+                var reg = &self.state.registers.byType.legacy[regA];
+                reg.* = .{
+                    .direct = Direct{
+                        .ref = ref,
+                        .size = size,
+                        .modifier = 0,
+                        .register = Register.ID.A,
+                    },
+                };
+
+                return reg.direct;
+            }
+            panic("Register A is already occupied", .{});
+        }
+
+        fn fetchDirect(self: *Self, program: *IR.Program, ref: IR.Ref, use: IR.Ref) ?Direct {
+            for (self.state.occupation.byType.legacy, 0..) |*occupation, idx| {
+                if (occupation.* == .Direct) {
+                    var reg = &self.state.registers.byType.legacy[idx];
+
+                    if (reg.direct.ref.value == ref.value) {
+                        const uses = program.getRefs(Instruction.getId(ref), ref.getIDX());
+
+                        if (uses[uses.len - 1].value == use.value) {
+                            occupation.* = .None;
+                        }
+                        return reg.direct;
+                    }
+                }
+            }
+            return null;
+        }
+
+        fn fetchArg(self: *Self, argIdx: u32) Direct {
+            const argReg = self.argRegisters[argIdx];
+            const occupation = self.state.occupation.array[@intFromEnum(argReg)];
+
+            if (occupation == .Indirect or occupation == .None) {
+                panic("Register {s} doesn't have a direct value", .{@tagName(argReg)});
+            }
+
+            const res = self.state.registers.array[@intFromEnum(argReg)];
+
+            if (res.direct.ref.getId() != .Arg) panic("Register {s} doesn't have an argument value", .{@tagName(argReg)});
+            if (res.direct.ref.getIDX() != argIdx) panic("Register {s} doesn't have the correct argument", .{@tagName(argReg)});
+
+            return res.direct;
+        }
+
+        fn reset(self: *Self) void {
+            @memset(self.state.occupation.array[0..], occupationType.None);
+        }
+
+        fn shouldSave(reg: Register.ID) bool {
+            const regInt = @intFromEnum(reg);
+            return regInt <= @intFromEnum(Register.ID.D) or (regInt >= @intFromEnum(Register.ID.R8) and regInt <= @intFromEnum(Register.ID.R11));
+        }
+
+        // Todo: Implement ways to alter the allocation
     };
 };
