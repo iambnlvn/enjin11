@@ -2,6 +2,7 @@ const std = @import("std");
 const Register = @import("Register.zig").Register;
 const Instruction = @import("genInstruction.zig").GenInstruction;
 const IrInstruction = @import("./../../../Instruction.zig").Instruction;
+const Parser = @import("./../../../Parser.zig");
 
 const sysVArgRegisters = [_]Register.ID{
     .DI,
@@ -101,3 +102,72 @@ const JumpOpcode = enum(u8) {
         };
     }
 };
+
+fn subRsp_S8(n: i8) [4]u8 {
+    var b = [_]u8{ 0x48, 0x83, 0xec, undefined };
+    @as(*i8, @ptrCast(&b[3])).* = n;
+    return b;
+}
+
+fn subRsp_s32(n: i32) [7]u8 {
+    var b = [_]u8{ 0x48, 0x81, 0xec, undefined, undefined, undefined, undefined };
+
+    @as(*align(1) i32, @ptrCast(&b[3])).* = n;
+    return b;
+}
+
+fn leaIndirect(reg: Register.ID, indirectReg: Register.ID, indirectOff: i32) Instruction {
+    const rexB = 0x48;
+    const opCode = 0x8d;
+    const isIndirectOffsetZero = indirectOff == 0;
+    const isIndirectOffset32Bit = indirectOff > std.math.maxInt(i8) and indirectOff < std.math.minInt(i8);
+    const regByte: u8 = (@as(u8, @intFromBool(!isIndirectOffsetZero and isIndirectOffset32Bit)) << 7) | (@as(u8, @intFromBool(!isIndirectOffsetZero and !isIndirectOffset32Bit)) << 6) | (@intFromEnum(reg) << 3) | @intFromEnum(indirectReg);
+
+    const sibByte = 0x24;
+    const bytes = blk: {
+        if (!isIndirectOffsetZero) {
+            if (isIndirectOffset32Bit) {
+                const indirectOffsetBytes = std.mem.asBytes(&indirectOff);
+
+                if (indirectReg == .SP) {
+                    break :blk &[_]u8{ rexB, opCode, regByte, sibByte, indirectOffsetBytes[0], indirectOffsetBytes[1], indirectOffsetBytes[2], indirectOffsetBytes[3] };
+                } else {
+                    break :blk &[_]u8{ rexB, opCode, regByte, indirectOffsetBytes[0], indirectOffsetBytes[1], indirectOffsetBytes[2], indirectOffsetBytes[3] };
+                }
+            } else {
+                const indirectOffsetByte: i8 = @as(i8, @intCast(indirectOff));
+                const indirectOffsetBytes = std.mem.asBytes(&indirectOffsetByte);
+
+                if (indirectReg == .SP) {
+                    break :blk [_]u8{ rexB, opCode, regByte, sibByte, indirectOffsetBytes[0] };
+                } else {
+                    break :blk [_]u8{ rexB, opCode, regByte, indirectOffsetBytes[0] };
+                }
+            }
+        } else {
+            if (indirectReg == .SP) {
+                break :blk [_]u8{ rexB, opCode, regByte, sibByte };
+            } else {
+                break :blk [_]u8{ rexB, opCode, regByte };
+            }
+        }
+    };
+    return Instruction.Resolved.new(bytes);
+}
+
+fn cmpIndirectImmediate(indirectReg: Register.ID, indirectOff: i32, indirectSize: u8, intLiteral: Parser.IntegerLiteral) Instruction {
+    const intByteCount: u8 = blk: {
+        if (intLiteral.value > std.math.maxInt(u32)) {
+            std.debug.panic("64-bit not supported", .{});
+        }
+        if (intLiteral.value > std.math.maxInt(u16)) break :blk 4;
+        if (intLiteral.value > std.math.maxInt(u8)) {
+            if (indirectSize == 2) break :blk 2 else break :blk 4;
+        }
+        break :blk 1;
+    };
+
+    const intBytes = std.mem.asBytes(&intLiteral.value)[0..intByteCount];
+    const opCode = if (intByteCount > 1 or indirectSize == std.math.maxInt(u8)) &[_]u8{0x81} else &[_]u8{0x83};
+    // encode the instruction
+}

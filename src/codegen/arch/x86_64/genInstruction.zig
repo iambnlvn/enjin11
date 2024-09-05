@@ -19,7 +19,7 @@ pub const GenInstruction = struct {
         bytes: [maxBytes]u8,
         size: u8,
 
-        inline fn new(bytes: []const u8) GenInstruction {
+        pub inline fn new(bytes: []const u8) GenInstruction {
             return .{
                 .resolution = .{
                     .resolved = .{
