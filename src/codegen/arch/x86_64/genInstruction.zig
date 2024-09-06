@@ -2,8 +2,8 @@ const std = @import("std");
 
 pub const GenInstruction = struct {
     const Self = @This();
-    const maxBytes = 15;
-    const maxBytesBeforeOpResolution = 3;
+    pub const maxBytes = 15;
+    pub const maxBytesBeforeOpResolution = 3;
     resolution: Resolution,
     status: Resolution.status,
 
@@ -35,7 +35,7 @@ pub const GenInstruction = struct {
             };
         }
 
-        inline fn newBytes(b: [maxBytes]u8, byteCount: u8) GenInstruction {
+        pub inline fn newBytes(b: [maxBytes]u8, byteCount: u8) GenInstruction {
             return .{
                 .resolution = .{
                     .resolved = .{

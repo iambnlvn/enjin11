@@ -169,5 +169,67 @@ fn cmpIndirectImmediate(indirectReg: Register.ID, indirectOff: i32, indirectSize
 
     const intBytes = std.mem.asBytes(&intLiteral.value)[0..intByteCount];
     const opCode = if (intByteCount > 1 or indirectSize == std.math.maxInt(u8)) &[_]u8{0x81} else &[_]u8{0x83};
-    // encode the instruction
+
+    return encodeIndirectInstructionOpcode(null, opCode, 0x38, indirectReg, indirectOff, intBytes);
+}
+
+fn cmpRegisterIndirect(reg: Register.ID, regSize: u8, indirectReg: Register.ID, indirectOff: i32) Instruction {
+    const opCode = [_]u8{0x3b - @as(u8, @intFromBool(regSize == 1))};
+
+    return encodeIndirectInstructionOpcode(null, opCode[0..], @intFromEnum(reg) << 3, indirectReg, indirectOff, std.mem.zeroes([]const u8));
+}
+
+fn encodeIndirectInstructionOpcode(rex: ?u8, opcode: []const u8, regByteStart: u8, indirectReg: Register.ID, indirectOffset: i32, afterComBytes: []const u8) Instruction {
+    var bytes: [Instruction.maxBytes]u8 = undefined;
+    var encodedByteCount: u8 = 0;
+
+    var indirectOffsetByteCount: u8 = undefined;
+    const indirectOffsetI8 = @as(i8, @intCast(indirectOffset));
+
+    const indirectOffsetBytes = blk: {
+        if (indirectOffset < std.math.minInt(i8) or indirectOffset > std.math.maxInt(i8)) {
+            indirectOffsetByteCount = 4;
+            break :blk @as([*]u8, @ptrFromInt(@intFromPtr(&indirectOffset)))[0..indirectOffsetByteCount];
+        } else {
+            indirectOffsetByteCount = 1;
+            break :blk std.mem.asBytes(@as(*align(1) const i8, @ptrCast(&indirectOffsetI8)))[0..];
+        }
+    };
+
+    if (rex) |rexB| {
+        bytes[encodedByteCount] = rexB;
+        encodedByteCount += 1;
+    }
+
+    for (opcode) |opcodeB| {
+        bytes[encodedByteCount] = opcodeB;
+        encodedByteCount += 1;
+    }
+
+    const isIndirectOffsetZero = indirectOffset == 0;
+    const indirectOffsetRegBytePart = (@as(u8, 0x40) * ((@as(u8, @intFromBool(indirectOffsetByteCount == 4)) << 1) | 1)) * @as(u8, @intFromBool(!isIndirectOffsetZero));
+
+    const regByte = regByteStart | @intFromEnum(indirectReg) | indirectOffsetRegBytePart;
+
+    bytes[encodedByteCount] = regByte;
+    encodedByteCount += 1;
+
+    if (indirectReg == .SP) {
+        bytes[encodedByteCount] = 0x24;
+        encodedByteCount += 1;
+    }
+
+    if (!isIndirectOffsetZero) {
+        for (indirectOffsetBytes) |b| {
+            bytes[encodedByteCount] = b;
+            encodedByteCount += 1;
+        }
+    }
+
+    for (afterComBytes) |b| {
+        bytes[encodedByteCount] = b;
+        encodedByteCount += 1;
+    }
+
+    return Instruction.Resolved.newBytes(bytes, encodedByteCount);
 }
