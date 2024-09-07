@@ -233,3 +233,36 @@ fn encodeIndirectInstructionOpcode(rex: ?u8, opcode: []const u8, regByteStart: u
 
     return Instruction.Resolved.newBytes(bytes, encodedByteCount);
 }
+
+fn movRegisterLiteral(reg: Register.ID, num: u64, byteCount: u16) Instruction {
+    const numberBytes = std.mem.asBytes(&num);
+
+    const byteSlice = switch (byteCount) {
+        1 => blk1: {
+            const b = [_]u8{ 0xb0 + @intFromEnum(reg), @as(u8, @truncate(num)) };
+            break :blk1 b[0..];
+        },
+        2 => blk2: {
+            const b = [_]u8{ 0x66, 0xb8 + @intFromEnum(reg), numberBytes[0], numberBytes[1] };
+            break :blk2 b[0..];
+        },
+        4 => blk4: {
+            const b = [_]u8{ 0xb8 + @intFromEnum(reg), numberBytes[0], numberBytes[1], numberBytes[2], numberBytes[3] };
+            break :blk4 b[0..];
+        },
+        8 => blk8: {
+            const b = [_]u8{ 0x48, 0xb8 + @intFromEnum(reg), numberBytes[0], numberBytes[1], numberBytes[2], numberBytes[3], numberBytes[4], numberBytes[5], numberBytes[6], numberBytes[7] };
+            break :blk8 b[0..];
+        },
+        else => unreachable,
+    };
+
+    return Instruction.Resolved.new(byteSlice);
+}
+
+fn movRegReg(dest: Register.ID, src: Register.ID, size: u8) Instruction {
+    const opCode: u8 = 0x89 - @as(u8, @intFromBool(size == 1));
+    const regByte: u8 = 0xc0 | (@intFromEnum(src) << 3) | @intFromEnum(dest);
+    const b = [_]u8{ opCode, regByte };
+    return Instruction.Resolved.new(b[0..]);
+}

@@ -18,7 +18,7 @@ const Direct = struct {
     register: Register.ID,
 };
 
-const Register = extern union {
+pub const Register = extern union {
     direct: Direct,
     indirect: Indirect,
 
@@ -259,12 +259,12 @@ const Register = extern union {
 
         fn allocateArg(self: *Self, argIdx: u32, size: u8) Direct {
             const targetRegister = self.argRegisters[argIdx];
-            var occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
+            const occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
 
             if (occupation.* == .None) {
                 occupation.* = .Direct;
 
-                var reg = &self.state.registers.array[@intFromEnum(targetRegister)];
+                const reg = &self.state.registers.array[@intFromEnum(targetRegister)];
                 reg.* = .{
                     .direct = Direct{
                         .ref = IR.Function.Arg.new(argIdx),
@@ -283,12 +283,12 @@ const Register = extern union {
         fn allocateCallArg(self: *Self, argIdx: u32, arg: IR.Ref, size: u8) Direct {
             const targetRegister = self.argRegisters[argIdx];
 
-            var occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
+            const occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
 
             if (occupation.* == .None) {
                 occupation.* = .Direct;
 
-                var reg = &self.state.registers.array[@intFromEnum(targetRegister)];
+                const reg = &self.state.registers.array[@intFromEnum(targetRegister)];
                 reg.* = .{
                     .direct = Direct{
                         .ref = arg,
@@ -311,7 +311,7 @@ const Register = extern union {
             if (occupation.* == .None) {
                 occupation.* = .Direct;
 
-                var reg = &self.state.registers.byType.legacy[regA];
+                const reg = &self.state.registers.byType.legacy[regA];
                 reg.* = .{
                     .direct = Direct{
                         .ref = ref,
@@ -329,7 +329,7 @@ const Register = extern union {
         fn fetchDirect(self: *Self, program: *IR.Program, ref: IR.Ref, use: IR.Ref) ?Direct {
             for (self.state.occupation.byType.legacy, 0..) |*occupation, idx| {
                 if (occupation.* == .Direct) {
-                    var reg = &self.state.registers.byType.legacy[idx];
+                    const reg = &self.state.registers.byType.legacy[idx];
 
                     if (reg.direct.ref.value == ref.value) {
                         const uses = program.getRefs(Instruction.getId(ref), ref.getIDX());

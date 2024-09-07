@@ -7,7 +7,7 @@ pub const GenInstruction = struct {
     resolution: Resolution,
     status: Resolution.status,
 
-    const Resolution = extern union {
+    const Resolution = union {
         resolved: Resolved,
         unresolved: Unresolved,
         const status = enum(u8) {
@@ -25,7 +25,8 @@ pub const GenInstruction = struct {
                     .resolved = .{
                         .bytes = blk: {
                             var res: [maxBytes]u8 = undefined;
-                            @memcpy(res[0..], bytes[0..]);
+                            // @memcpy(res[0..], bytes);
+                            std.mem.copyForwards(u8, res[0..], bytes);
                             break :blk res;
                         },
                         .size = @as(u8, @intCast(bytes.len)),
