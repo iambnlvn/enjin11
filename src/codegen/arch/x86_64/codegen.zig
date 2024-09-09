@@ -434,6 +434,22 @@ fn subRegImm(reg: Register.ID, size: u8, imm: Parser.IntegerLiteral) Instruction
 //     }
 // }
 
+fn incReg(reg: Register.ID, size: u8) Instruction {
+    const opCode: u8 = 0xff - @as(u8, @intFromBool(size == 1));
+    const regB = 0xc0 | @intFromEnum(reg);
+    var b = [_]u8{ opCode, regB };
+
+    return Instruction.Resolved.new(b[0..]);
+}
+
+fn decReg(reg: Register.ID, size: u8) Instruction {
+    const opCode: u8 = 0xff - @as(u8, @intFromBool(size == 1));
+    const regB = 0xc8 | @intFromEnum(reg);
+    var b = [_]u8{ opCode, regB };
+
+    return Instruction.Resolved.new(b[0..]);
+}
+
 pub const Rex = enum(u8) {
     None = 0,
     Rex = 0x40,
