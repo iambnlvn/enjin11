@@ -266,3 +266,41 @@ fn movRegReg(dest: Register.ID, src: Register.ID, size: u8) Instruction {
     const b = [_]u8{ opCode, regByte };
     return Instruction.Resolved.new(b[0..]);
 }
+
+fn moveRegIndirect(dest: Register.ID, size: u8, indirectReg: Register.ID, offset: i32) Instruction {
+    return switch (size) {
+        1, 2 => unreachable,
+        4 => encodeIndirectInstructionOpcode(null, &[_]u8{0x8b}, @intFromEnum(dest) << 3, indirectReg, offset, std.mem.zeroes([]const u8)),
+        8 => encodeIndirectInstructionOpcode(0x48, &[_]u8{0x8b}, @intFromEnum(dest) << 3, indirectReg, offset, std.mem.zeroes([]const u8)),
+        else => unreachable,
+    };
+}
+
+fn moveIndirectReg(reg: Register.ID, offset: i32, size: u8, destReg: Register.ID, destSize: u8) Instruction {
+    const opCode: []const u8 = if (size > 1) &[_]u8{0x89} else &[_]u8{0x88};
+    const rex = if (destSize == 8) @intFromEnum(Rex.W) else null;
+
+    return encodeIndirectInstructionOpcode(rex, opCode, @intFromEnum(destReg) << 3, reg, offset, std.mem.zeroes([]u8));
+}
+
+fn moveIndirectImmediateUnsigned(indirectReg: Register.ID, offset: i32, imm: u64, size: u16) Instruction {
+    return encodeIndirectInstructionOpcode(null, &[_]u8{0xc7}, 0, indirectReg, offset, std.mem.asBytes(&imm)[0..size]);
+}
+
+fn moveRegDsRel(dst: Register.ID, size: u8, offset: u32) Instruction {
+    const b = switch (size) {
+        4 => &[_]u8{ 0x8b, @intFromEnum(dst) << 3 | 0x05 },
+        8 => &[_]u8{ 0x48, 0x8b, @intFromEnum(dst) << 3 | 0x05 },
+        else => unreachable,
+    };
+    return Instruction.Unresolved.new(b, offset, .RelDs, 4, @as(u8, @intCast(b.len)));
+}
+
+pub const Rex = enum(u8) {
+    None = 0,
+    Rex = 0x40,
+    B = 0x41,
+    X = 0x42,
+    R = 0x44,
+    W = 0x48,
+};
