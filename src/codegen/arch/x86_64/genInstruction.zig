@@ -48,7 +48,7 @@ pub const GenInstruction = struct {
             };
         }
 
-        inline fn newComponent(byteSlices: []const []const u8) GenInstruction {
+        pub inline fn newComponent(byteSlices: []const []const u8) GenInstruction {
             var offset: u8 = 0;
 
             return .{

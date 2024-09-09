@@ -367,6 +367,73 @@ fn addRegImm(reg: Register.ID, size: u8, imm: Parser.IntegerLiteral) Instruction
     return Instruction.Resolved.new(arr[0..]);
 }
 
+fn subRegImm(reg: Register.ID, size: u8, imm: Parser.IntegerLiteral) Instruction {
+    const val = imm.value;
+    var immByteCount: u8 = if (val > std.math.maxInt(u32)) 8 else if (val > std.math.maxInt(u16)) 4 else if (val > std.math.maxInt(u8)) 2 else 1;
+
+    if (reg == .A and !(immByteCount == 1 and immByteCount != size)) {
+        const opCode: u8 = 0x2d - @as(u8, @intFromBool(size == 1));
+        immByteCount = if (immByteCount == size) size else immByteCount;
+
+        const immB = std.mem.asBytes(&val)[0..immByteCount];
+        const arr = [_][]const u8{ std.mem.asBytes(&opCode), immB };
+
+        return Instruction.Resolved.newComponent(arr[0..]);
+    } else {
+        if (immByteCount == 1) {
+            if (size > immByteCount) {
+                const opCode: u8 = 0x83;
+                const regB = 0xe8 | @intFromEnum(reg);
+                const bytePrologue = [_]u8{ opCode, regB };
+                const immB = std.mem.asBytes(&val)[0..immByteCount];
+                const arr = [_][]const u8{ bytePrologue[0..], immB };
+
+                return Instruction.Resolved.newComponent(arr[0..]);
+            } else {
+                unreachable;
+            }
+        } else {
+            unreachable;
+        }
+    }
+}
+
+//TODO: validate which implementation is correct
+// fn createInstruction(opCode: u8, reg: Register.ID, val: u64, immByteCount: u8) Instruction {
+//     const regB = 0xe8 | @intFromEnum(reg);
+//     const bytePrologue = [_]u8{ opCode, regB };
+//     const immB = std.mem.asBytes(&val)[0..immByteCount];
+//     const arr = [_][]const u8{ bytePrologue[0..], immB };
+
+//     return Instruction.Resolved.new(arr[0..]);
+// }
+
+// fn subRegImm(reg: Register.ID, size: u8, imm: Parser.IntegerLiteral) Instruction {
+//     const val = imm.value;
+//     var immByteCount: u8 = if (val > std.math.maxInt(u32)) 8 else if (val > std.math.maxInt(u16)) 4 else if (val > std.math.maxInt(u8)) 2 else 1;
+
+//     if (reg == .A and !(immByteCount == 1 and immByteCount != size)) {
+//         const opCode: u8 = 0x2d - @as(u8, @intFromBool(size == 1));
+//         immByteCount = if (immByteCount == size) size else immByteCount;
+
+//         const immB = std.mem.asBytes(&val)[0..immByteCount];
+//         const arr = [_][]const u8{ std.mem.asBytes(&opCode), immB };
+
+//         return Instruction.Resolved.new(arr[0..]);
+//     } else {
+//         if (immByteCount == 1) {
+//             if (size > immByteCount) {
+//                 return createInstruction(0x83, reg, val, immByteCount);
+//             } else {
+//                 unreachable;
+//             }
+//         } else {
+//             const opCode: u8 = if (immByteCount == 4) 0x81 else 0x83;
+//             return createInstruction(opCode, reg, val, immByteCount);
+//         }
+//     }
+// }
+
 pub const Rex = enum(u8) {
     None = 0,
     Rex = 0x40,
