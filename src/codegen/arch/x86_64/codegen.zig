@@ -339,6 +339,34 @@ fn addRegReg(dst: Register.ID, secondReg: Register.ID, size: u8) Instruction {
     return Instruction.Resolved.new(b[0..]);
 }
 
+fn addRegImm(reg: Register.ID, size: u8, imm: Parser.IntegerLiteral) Instruction {
+    const val = imm.value;
+    var immByteCount: u8 = if (val > std.math.maxInt(u32)) 8 else if (val > std.math.maxInt(u16)) 4 else if (val > std.math.maxInt(u8) and size > 2) 4 else if (val > std.math.maxInt(u8)) 2 else 1;
+
+    if (reg == .A and immByteCount == 1 and size == 1) {
+        const opCode: u8 = 0x05 - @as(u8, @intFromBool(size == 1));
+        const immB = std.mem.asBytes(&val)[0..immByteCount];
+        const arr = [_][]const u8{ std.mem.asBytes(&opCode), immB };
+
+        return Instruction.Resolved.new(arr[0..]);
+    }
+
+    const opCode: u8 = switch (immByteCount) {
+        1 => 0x83,
+        2 => 0x81,
+        4 => 0x81,
+        8 => 0x81,
+        else => unreachable,
+    };
+
+    const regB = 0xc0 | @intFromEnum(reg);
+    const bytePrologue = [_]u8{ opCode, regB };
+    const immB = std.mem.asBytes(&val)[0..immByteCount];
+    const arr = [_][]const u8{ bytePrologue[0..], immB };
+
+    return Instruction.Resolved.new(arr[0..]);
+}
+
 pub const Rex = enum(u8) {
     None = 0,
     Rex = 0x40,
