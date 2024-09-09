@@ -296,6 +296,49 @@ fn moveRegDsRel(dst: Register.ID, size: u8, offset: u32) Instruction {
     return Instruction.Unresolved.new(b, offset, .RelDs, 4, @as(u8, @intCast(b.len)));
 }
 
+fn addRegIndirect(dst: Register.ID, size: u8, indReg: Register.ID, indOff: i32) Instruction {
+    var indOffsetByteCount: u8 = 0;
+
+    if (indOffsetByteCount != 0) {
+        indOffsetByteCount = if (indOff > std.math.maxInt(i8)) 4 else 1;
+    }
+
+    var b: [15]u8 = undefined;
+    var byteCount: u8 = @as(u8, @intCast(@intFromBool(indReg == .SP))) + indOffsetByteCount + 2;
+
+    const opCode: u8 = if (size == 1) 0x02 else 0x03;
+    b[0] = opCode;
+
+    b[1] = blk: {
+        const base: u8 = if (indOff != 0) 0x40 else 0x00;
+
+        break :blk base | @intFromEnum(dst) << 3 | @intFromEnum(indReg);
+    };
+
+    var offset: u8 = 2;
+    if (indReg == .SP) {
+        b[offset] = 0x24;
+        offset += 1;
+    }
+
+    if (indOffsetByteCount > 0) {
+        for (std.mem.asBytes(&indOff)[0..indOffsetByteCount]) |indOffByte| {
+            b[offset] = indOffByte;
+            offset += 1;
+        }
+    }
+
+    return Instruction.Resolved.new(b[0..byteCount]);
+}
+
+fn addRegReg(dst: Register.ID, secondReg: Register.ID, size: u8) Instruction {
+    const opCode = 0x01 - @intFromBool(size == 1);
+    const regB = 0xc0 | @as(u8, @intCast(@intFromEnum(secondReg) << 3)) | @intFromEnum(dst);
+    const b = [_]u8{ opCode, regB };
+
+    return Instruction.Resolved.new(b[0..]);
+}
+
 pub const Rex = enum(u8) {
     None = 0,
     Rex = 0x40,
