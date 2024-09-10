@@ -3,7 +3,7 @@ const IR = @import("./../../../IR.zig");
 const Instruction = @import("./../../../Instruction.zig").Instruction;
 const panic = std.debug.panic;
 
-const Indirect = struct {
+pub const Indirect = struct {
     ref: IR.Ref,
     offset: i32,
     alignment: u32,
@@ -11,7 +11,7 @@ const Indirect = struct {
     register: Register.ID,
 };
 
-const Direct = struct {
+pub const Direct = struct {
     ref: IR.Ref,
     size: u8,
     modifier: u8,
@@ -22,7 +22,7 @@ pub const Register = extern union {
     direct: Direct,
     indirect: Indirect,
 
-    const count = 16;
+    pub const count = 16;
 
     const ArrayType = [Register.count]Register;
 
