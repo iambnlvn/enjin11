@@ -450,6 +450,29 @@ fn decReg(reg: Register.ID, size: u8) Instruction {
     return Instruction.Resolved.new(b[0..]);
 }
 
+fn imulRegInd(reg: Register.ID, indReg: Register.ID, indOffset: i32) Instruction {
+    const opCode = [_]u8{ 0x0f, 0xaf };
+
+    return encodeIndirectInstructionOpcode(null, opCode[0..], @intFromEnum(reg) << 3, indReg, indOffset, std.mem.zeroes([]const u8));
+}
+
+fn xorReg(reg: Register.ID, size: u8) Instruction {
+    const mod = 0b11;
+    const rm = @intFromEnum(reg);
+
+    const b = switch (size) {
+        1, 2 => unreachable,
+        4 => blk: {
+            const bytes = [_]u8{ 0x31, 0xc0 | (mod << 6) | ((@intFromEnum(reg) & 0b111) << 3) | (rm & 0b111) };
+            break :blk bytes[0..];
+        },
+        8 => unreachable,
+        else => unreachable,
+    };
+
+    return Instruction.Resolved.new(b);
+}
+
 pub const Rex = enum(u8) {
     None = 0,
     Rex = 0x40,
