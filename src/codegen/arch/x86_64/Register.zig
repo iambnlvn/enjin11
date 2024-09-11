@@ -132,7 +132,7 @@ pub const Register = extern union {
         args,
     };
 
-    const Allocator = struct {
+    pub const Allocator = struct {
         state: State,
         argRegisters: []const Register.ID,
 
