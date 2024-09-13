@@ -1,8 +1,12 @@
 const std = @import("std");
-const Register = @import("Register.zig").Register;
+const _reg = @import("Register.zig");
+const Register = _reg.Register;
+const Indirect = _reg.Indirect;
 const Instruction = @import("genInstruction.zig").GenInstruction;
 const IrInstruction = @import("./../../../Instruction.zig").Instruction;
 const Parser = @import("./../../../Parser.zig");
+const IR = @import("./../../../IR.zig");
+const Program = @import("./Program.zig").Program;
 
 const sysVArgRegisters = [_]Register.ID{
     .DI,
@@ -284,7 +288,7 @@ fn addRegIndirect(dst: Register.ID, size: u8, indReg: Register.ID, indOff: i32) 
     }
 
     var b: [15]u8 = undefined;
-    var byteCount: u8 = @as(u8, @intCast(@intFromBool(indReg == .SP))) + indOffsetByteCount + 2;
+    const byteCount: u8 = @as(u8, @intCast(@intFromBool(indReg == .SP))) + indOffsetByteCount + 2;
 
     const opCode: u8 = if (size == 1) 0x02 else 0x03;
     b[0] = opCode;
@@ -321,7 +325,7 @@ fn addRegReg(dst: Register.ID, secondReg: Register.ID, size: u8) Instruction {
 
 fn addRegImm(reg: Register.ID, size: u8, imm: Parser.IntegerLiteral) Instruction {
     const val = imm.value;
-    var immByteCount: u8 = if (val > std.math.maxInt(u32)) 8 else if (val > std.math.maxInt(u16)) 4 else if (val > std.math.maxInt(u8) and size > 2) 4 else if (val > std.math.maxInt(u8)) 2 else 1;
+    const immByteCount: u8 = if (val > std.math.maxInt(u32)) 8 else if (val > std.math.maxInt(u16)) 4 else if (val > std.math.maxInt(u8) and size > 2) 4 else if (val > std.math.maxInt(u8)) 2 else 1;
 
     if (reg == .A and immByteCount == 1 and size == 1) {
         const opCode: u8 = 0x05 - @as(u8, @intFromBool(size == 1));
@@ -461,3 +465,86 @@ pub const Rex = enum(u8) {
     R = 0x44,
     W = 0x48,
 };
+
+//used to fetch the value from memory based on a given pointer.
+//It  returns an indirect reference to the value, which includes information
+//about the register and offset where the value is stored.
+pub fn fetchLoad(
+    prog: *const IR.Program,
+    func: *Program.Function,
+    loadRef: IR.Ref,
+    ldUse: IR.Ref,
+    comptime isRegisterLoad: bool,
+) Indirect {
+    const load = prog.instructions.load[loadRef.getIDX()];
+    const loadPtrId = IrInstruction.getId(load.pointer);
+
+    switch (loadPtrId) {
+        .alloc => {
+            const ldUseId = IrInstruction.getId(ldUse);
+            switch (ldUseId) {
+                .store => {
+                    const store = prog.instructions.store[ldUse.getIDX()];
+                    const resSize = @as(u8, @intCast(store.type.getSizeResolved(prog)));
+                    const allocation = func.stackAllocator.getAlloc(func, prog, load.pointer);
+
+                    const regSize = @as(u8, @intCast(allocation.size));
+                    const loadReg = func.regAllocator.allocateDirect(load.pointer, regSize);
+                    func.regAllocator.free(loadReg.register);
+
+                    const moveRegStack = moveRegIndirect(
+                        loadReg.register,
+                        @as(u8, allocation.size),
+                        allocation.register,
+                        allocation.offset,
+                    );
+
+                    func.appendInstruction(moveRegStack);
+                    return func.regAllocator.allocateIndirect(loadRef, 0, resSize);
+                },
+                .load, .getElPtr, .icmp => return func.regAllocator.allocateIndirect(func, prog, load.pointer),
+                else => std.debug.panic("Invalid load use", .{}),
+            }
+        },
+        .load => {
+            if (false) {
+                const stackIndirect = fetchLoad(prog, func, load.pointer, loadRef, isRegisterLoad);
+
+                const indirectReg = func.regAllocator.allocateIndirect(loadRef, 0, @as(u8, @intCast(stackIndirect.size)));
+
+                const movRegStack = moveRegIndirect(
+                    indirectReg.register,
+                    @as(u8, @intCast(indirectReg.size)),
+                    stackIndirect.register,
+                    stackIndirect.offset,
+                );
+                func.appendInstruction(movRegStack);
+
+                return indirectReg;
+            } else {
+                const loadSize = @as(u8, @intCast(load.type.getSizeResolved(prog)));
+
+                const stackIndirect = fetchLoad(prog, func, load.pointer, loadRef, isRegisterLoad);
+                const register = func.regAllocator.allocateDirect(load.pointer, @as(u8, @intCast(stackIndirect.size)));
+                const movRegStack = moveRegIndirect(
+                    register.register,
+                    @as(u8, @intCast(register.size)),
+                    stackIndirect.register,
+                    stackIndirect.offset,
+                );
+                func.appendInstruction(movRegStack);
+
+                func.regAllocator.free(register.register);
+                return func.regAllocator.allocateIndirect(loadRef, 0, loadSize);
+            }
+        },
+        .getElPtr => {
+            const gepIndirect = func.stackAllocator.processGEP(func, prog, load.pointer);
+            _ = gepIndirect;
+            //TODO: figure it out
+        },
+        else => {
+            std.debug.panic("Invalid load pointer", .{});
+        },
+    }
+}
