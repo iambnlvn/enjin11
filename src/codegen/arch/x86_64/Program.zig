@@ -37,7 +37,7 @@ pub const Program = struct {
     fns: []Function,
     dataBuffer: ArrayList(u8),
 
-    const Function = struct {
+    pub const Function = struct {
         instructions: ArrayList(Instruction),
         basicBlockInstructionOffsets: ArrayList(u64),
         basicBlockBufferOffsets: ArrayList(u64),
@@ -53,7 +53,7 @@ pub const Program = struct {
             ret,
         };
 
-        fn appendInstruction(self: *Function, instr: Instruction) void {
+        pub fn appendInstruction(self: *Function, instr: Instruction) void {
             self.instructions.append(instr) catch unreachable;
         }
     };
@@ -76,7 +76,7 @@ pub const Program = struct {
             func.codeBufferOffset = @as(u32, text.buffer.items.len);
 
             for (func.prevPatches.items) |patch| {
-                var ptrWriter = @as(*align(1) i32, @ptrCast(&text.buffer.items[patch.codeBufferOffset]));
+                const ptrWriter = @as(*align(1) i32, @ptrCast(&text.buffer.items[patch.codeBufferOffset]));
                 ptrWriter.* = @as(i32, @intCast(@as(i64, @intCast(func.codeBufferOffset)) - @as(i64, @intCast(patch.codeBufferOffset + @sizeOf(i32)))));
             }
 
@@ -204,7 +204,7 @@ pub const Program = struct {
                 for (postFuncPatches[blockIdx].items) |patchBufferIdx| {
                     resolutionCount += 1;
 
-                    var ptrWriter = @as(*align(1) i32, @ptrCast(&text.buffer.items[patchBufferIdx]));
+                    const ptrWriter = @as(*align(1) i32, @ptrCast(&text.buffer.items[patchBufferIdx]));
                     const value2Write = @as(i32, @intCast(@as(i64, @intCast(blockBufferOffset)) - @as(i64, @intCast(patchBufferIdx + @sizeOf(i32)))));
                     ptrWriter.* = value2Write;
                 }

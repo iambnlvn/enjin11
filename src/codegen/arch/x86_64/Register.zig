@@ -145,11 +145,11 @@ pub const Register = extern union {
             return res;
         }
 
-        fn free(self: *Self, reg: Register.ID) void {
+        pub fn free(self: *Self, reg: Register.ID) void {
             self.state.occupation.array[@intFromEnum(reg)] = .None;
         }
 
-        fn allocateDirect(self: *Self, value: IR.Ref, regSize: u8) Direct {
+        pub fn allocateDirect(self: *Self, value: IR.Ref, regSize: u8) Direct {
             const registers = &self.state.registers.byType.legacy;
             const occupation = &self.state.occupation.byType.legacy;
 
@@ -172,7 +172,7 @@ pub const Register = extern union {
             panic("Couldn't allocate register", .{});
         }
 
-        fn allocateIndirect(self: *Self, ref: IR.Ref, offset: i32, size: u32) Indirect {
+        pub fn allocateIndirect(self: *Self, ref: IR.Ref, offset: i32, size: u32) Indirect {
             const registers = &self.state.registers.byType.legacy;
             const occupation = &self.state.occupation.byType.legacy;
 
