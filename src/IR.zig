@@ -188,6 +188,7 @@ pub const Program = struct {
         br: []Instruction.Br,
         icmp: []Instruction.Icmp,
         alloc: []Instruction.Alloc,
+        gep: []Instruction.GetElPtr,
     },
     functions: []Function,
     functionTypes: []Type.Function,

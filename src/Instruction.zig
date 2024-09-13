@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const Ir = @import("IR.zig");
 const ArrayList = std.ArrayList;
 const Type = @import("Type.zig").Type;
+
 pub const Instruction = struct {
     pub const count = @intFromEnum(ID.memCopy) + 1;
 
@@ -36,6 +37,7 @@ pub const Instruction = struct {
         alloc,
         getElPtr,
         load,
+        store,
         //TODO: implement more instructions
         const position = Ref.ID.position - @bitSizeOf(Instruction.ID);
     };
