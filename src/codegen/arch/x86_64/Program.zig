@@ -29,7 +29,7 @@ pub const sysV_ABI_PrologueBytes = pushRBPBytes ++ movRBP_RSPBytes;
 
 var abi: std.Target.Abi = undefined;
 
-const BackwardPatch = struct {
+pub const BackwardPatch = struct {
     codeBufferOffset: u32,
 };
 

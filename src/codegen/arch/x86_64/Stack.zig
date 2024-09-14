@@ -15,20 +15,20 @@ pub const Stack = struct {
         const arrType = [Register.count]Stack.Store;
     };
 
-    const Allocator = struct {
+    pub const Allocator = struct {
         allocations: ArrayList(Indirect),
         offset: i32,
 
         const Self = @This();
 
-        fn new(allocator: *std.mem.Allocator) Stack.Allocator {
+        pub fn new(allocator: *std.mem.Allocator) Stack.Allocator {
             return .{
                 .allocations = ArrayList(Indirect).init(allocator.*),
                 .offset = 0,
             };
         }
 
-        fn allocate(self: *Self, size: u32, alloc: IR.Ref) void {
+        pub fn allocate(self: *Self, size: u32, alloc: IR.Ref) void {
             const allocationOffset = @as(i32, std.mem.alignForward(@as(u32, @intCast(self.offset)), size));
 
             self.offset += @as(i32, @intCast(size));

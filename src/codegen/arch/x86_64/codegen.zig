@@ -6,7 +6,10 @@ const Instruction = @import("genInstruction.zig").GenInstruction;
 const IrInstruction = @import("./../../../Instruction.zig").Instruction;
 const Parser = @import("./../../../Parser.zig");
 const IR = @import("./../../../IR.zig");
-const Program = @import("./Program.zig").Program;
+const _prog = @import("./Program.zig");
+const Program = _prog.Program;
+const BackWardPatch = _prog.BackwardPatch;
+const Stack = @import("Stack.zig").Stack;
 
 const sysVArgRegisters = [_]Register.ID{
     .DI,
@@ -546,5 +549,221 @@ pub fn fetchLoad(
         else => {
             std.debug.panic("Invalid load pointer", .{});
         },
+    }
+}
+
+const Data = struct {
+    offsets: [Kind.count]std.ArrayList(u32),
+    buffer: std.ArrayList(u8),
+
+    const Kind = enum {
+        integer,
+        array,
+        structure,
+        const count = std.enums.values(Kind).len;
+    };
+};
+
+pub fn encode(
+    allocator: *std.mem.Allocator,
+    prog: *const IR.Program,
+    execFIleName: []const u8,
+    target: std.Target,
+) void {
+    var abi = target.abi;
+    const os = target.os.tag;
+    if (os == .windows) abi = .msvc;
+    // this is probably bad as this may crash if the abi is not implemented, instead of giving an err back
+    // const argRegisters: Register.ID, const stackRegister: Register.ID = switch (abi) {
+    //     .msvc => .{ msvcArgRegisters[0..], Register.ID.SP },
+    //     .gnu => .{ sysVArgRegisters[0..], Register.ID.BP },
+    // };
+    _ = execFIleName;
+    const argRegisters = switch (abi) {
+        .gnu => sysVArgRegisters[0..],
+        .msvc => msvcArgRegisters[0..],
+        else => std.debug.panic("{any} not implemented", .{@tagName(abi)}),
+    };
+
+    const stackRegister = switch (abi) {
+        .gnu => Register.ID.BP,
+        .msvc => Register.ID.SP,
+        else => std.debug.panic("{any} not implemented", .{@tagName(abi)}),
+    };
+    _ = stackRegister;
+    const functionCount = prog.functions.len;
+    var functions = std.ArrayList(Program.Function).initCapacity(allocator.*, functionCount) catch unreachable;
+
+    var data = Data{
+        .buffer = std.ArrayList(u8).init(allocator.*),
+        .offsets = undefined,
+    };
+
+    data.offsets[@intFromEnum(Data.Kind.array)] = std.ArrayList(u32).initCapacity(allocator.*, prog.arrayLiterals.len) catch unreachable;
+
+    for (prog.arrayLiterals) |arrayLit| {
+        const arrayType = prog.arrayTypes[arrayLit.type.getIdx()];
+        const elSize = arrayType.type.getSizeResolved(prog);
+        const dataBufferOffset = @as(u32, @intCast(data.buffer.items.len));
+        data.offsets[@intFromEnum(Data.Kind.array)].appendAssumeCapacity(dataBufferOffset);
+
+        for (arrayLit.elements) |el| {
+            const intLit = prog.integerLiterals[el.getIdx()];
+            data.buffer.appendSlice(std.mem.asBytes(&intLit.value[0..elSize])) catch unreachable;
+        }
+    }
+
+    data.offsets[@intFromEnum(Data.Kind.structure)] = std.ArrayList(u32).initCapacity(allocator.*, prog.structLiterals.len) catch unreachable;
+
+    for (prog.structLiterals, 0..) |structLit, structLitIdx| {
+        const structSize = structLit.type.getSize(prog);
+        const dataBufferOffset = @as(u32, @intCast(data.buffer.items.len));
+        //TODO: remove the _ prefix later, vars will be used later
+        _ = structSize;
+        _ = structLitIdx;
+        data.offsets[@intFromEnum(Data.Kind.structure)].appendAssumeCapacity(dataBufferOffset);
+
+        for (structLit.fields) |field| {
+            const intLit = prog.integerLiterals[field.getIdx()];
+            data.buffer.appendSlice(std.mem.asBytes(&intLit.value[0..field.size])) catch unreachable;
+        }
+    }
+
+    for (prog.functions) |*func| {
+        var stackAllocator = Stack.Allocator.new(allocator);
+        var regAllocator = Register.Allocator.new(argRegisters);
+
+        for (func.declaration.type.argTypes, 0..) |argType, argIdx| {
+            const argSize = argType.getSizeResolved(prog);
+            _ = regAllocator.allocateArg(@as(u32, @intCast(argIdx)), @as(u8, @intCast(argSize)));
+        }
+
+        const basicBlockCount = func.basicBlocs.len;
+
+        const entryBlockIdx = func.basicBlocs[0];
+        const entryBlock = prog.basicBlocks[entryBlockIdx];
+
+        for (entryBlock.instructions.items) |instruction| {
+            if (IrInstruction.getId(instruction) == .alloc) _ = stackAllocator.allocate(@as(u32, @intCast(instruction.getSize(prog))), instruction);
+        }
+
+        functions.append(.{
+            .instructions = std.ArrayList(Instruction).init(allocator) catch unreachable,
+            .basicBlockBufferOffsets = std.ArrayList(allocator, basicBlockCount).init(allocator) catch unreachable,
+            .basicBlockInstructionOffsets = std.ArrayList(u64).initCapacity(allocator, basicBlockCount) catch unreachable,
+            .maxCallparamSize = 0,
+            .prevPatches = std.ArrayList(BackWardPatch).init(allocator),
+            .terminator = .noreturn,
+            .regAllocator = regAllocator,
+            .stackAllocator = stackAllocator,
+        }) catch unreachable;
+    }
+
+    for (prog.functions, 0..) |*irFunc, irFuncIdx| {
+        var function = &functions.items[irFuncIdx];
+        var occupiedRegCount: u32 = 0;
+        const argCount = irFunc.declaration.type.argTypes.len;
+        _ = argCount;
+        for (function.regAllocator.state.occupation.array) |occupation| {
+            occupiedRegCount += @intFromBool(occupation != .None);
+        }
+
+        for (irFunc.basicBlocs, 0..) |basicBlockIdx, basicBlockIter| {
+            const basicBlock = prog.basicBlocks[basicBlockIdx];
+            if (basicBlockIter != 0) function.regAllocator.reset();
+
+            const instructionOffset = function.instructions.items.len;
+            function.basicBlockInstructionOffsets.appendAssumeCapacity(instructionOffset);
+
+            for (basicBlock.instructions.items) |instruction| {
+                const instructionId = IrInstruction.getId(instruction);
+                const instructionIdx = instruction.getIDX();
+                _ = instructionIdx;
+                switch (instructionId) {
+                    .icmp => processIcmp(prog, function, instruction),
+                    // Todo: implement the rest of the instructions
+                    else => std.debug.panic("Instruction not implemented", .{}),
+                    // .add => processAdd(prog, function, instruction),
+                    // .sub => processSub(prog, function, instruction),
+                    // .mul => processMul(prog, function, instruction),
+                    // .memCopy => processMemCopy(prog, function, instruction),
+                }
+            }
+        }
+    }
+}
+
+//TODO: Refactor this function
+
+fn processIcmp(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) void {
+    const icmpInstruction = prog.instructions.icmp[ref.getIDX()];
+    var leftOperandKind: OperandKind = undefined;
+    var rightOperandKind: OperandKind = undefined;
+
+    const leftOperandAllocation = blk: {
+        switch (icmpInstruction.left.getId()) {
+            .Instruction => {
+                const instructionId = IrInstruction.getId(icmpInstruction.left);
+                switch (instructionId) {
+                    .load => {
+                        leftOperandKind = .Stack;
+                        break :blk fetchLoad(prog, func, icmpInstruction.left, ref, true);
+                    },
+                    else => std.debug.panic("", .{}), // Note:Add a better debug message
+                }
+            },
+            else => std.debug.panic("", .{}),
+        }
+    };
+
+    switch (icmpInstruction.right.getId()) {
+        .Constant => {
+            switch (IR.Constant.getId(icmpInstruction.right)) {
+                .Int => {
+                    rightOperandKind = .Immediate;
+                    const intLiteral = prog.integerLiterals[icmpInstruction.right.getIDX()];
+
+                    const cmp = cmpBlk: {
+                        if (leftOperandKind == .Stack) break :cmpBlk cmpIndirectImmediate(
+                            leftOperandAllocation.register,
+                            leftOperandAllocation.offset,
+                            @as(u8, @intCast(leftOperandAllocation.size)),
+                            intLiteral,
+                        ) else unreachable;
+                    };
+
+                    func.appendInstruction(cmp);
+                },
+                else => std.debug.panic("Unexpected constant type in processIcmp: {}", .{IR.Constant.getId(icmpInstruction.right)}),
+            }
+        },
+        .Instruction => {
+            const instructionId = IrInstruction.getId(icmpInstruction.right);
+
+            switch (instructionId) {
+                .load => {
+                    if (leftOperandKind == .Stack) {
+                        const regSize = @as(u8, @intCast(leftOperandAllocation.size));
+                        const loadReg = func.regAllocator.allocateDirect(icmpInstruction.right, regSize);
+
+                        const moveRegStack = moveRegIndirect(
+                            loadReg.register,
+                            @as(u8, @intCast(leftOperandAllocation.size)),
+                            leftOperandAllocation.register,
+                            leftOperandAllocation.offset,
+                        );
+
+                        func.regAllocator.alterAllocDirect(loadReg.register, ref);
+                        func.appendInstruction(moveRegStack);
+
+                        const secondOp = fetchLoad(prog, func, icmpInstruction.right, ref, false);
+                        const cmpRegStack = cmpRegisterIndirect(loadReg.register, regSize, secondOp.register, secondOp.size);
+                        func.appendInstruction(cmpRegStack);
+                    } else unreachable;
+                },
+                else => std.debug.panic("Unexpected else branch in processIcmp: invalid icmpInstruction.left value", .{}),
+            }
+        },
+        else => std.debug.panic("Unexpected else branch in processIcmp: invalid icmpInstruction", .{}),
     }
 }
