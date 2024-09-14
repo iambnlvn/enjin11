@@ -207,14 +207,40 @@ pub const Lexer = struct {
                 },
                 '0'...'9' => {
                     var integer = c;
-                    while (std.ascii.isDigit(c)) {
+                    var base: u5 = 0;
+
+                    if (integer == '0') {
+                        switch (src[tokenizer.currentIdx + 1]) {
+                            'b', 'B' => {
+                                base = 2;
+                                tokenizer.currentIdx += 1;
+                            },
+                            'o', 'O' => {
+                                base = 8;
+                                tokenizer.currentIdx += 1;
+                            },
+                            'x', 'X' => {
+                                base = 16;
+                                tokenizer.currentIdx += 1;
+                            },
+                            else => base = 10,
+                        }
+                    }
+
+                    while (std.ascii.isDigit(integer) or (std.ascii.isHex(integer)) or ((integer == '0' or integer == '1'))) {
                         tokenizer.currentIdx += 1;
                         integer = src[tokenizer.currentIdx];
                     }
                     end = tokenizer.currentIdx;
-                    tokenizer.currentIdx -= 1;
                     const num = src[start..end];
-                    const val = std.fmt.parseUnsigned(u64, num, 10) catch panic("Failed to parse integer", .{});
+                    //Todo: implement float literals and E notation
+                    const val = switch (base) {
+                        16 => std.fmt.parseUnsigned(u64, num, 0) catch panic("Failed to parse hexadecimal integer", .{}),
+                        8 => std.fmt.parseUnsigned(u64, num, 0) catch panic("Failed to parse octal integer", .{}),
+                        2 => std.fmt.parseUnsigned(u64, num, 0) catch panic("Failed to parse binary integer", .{}),
+                        else => std.fmt.parseUnsigned(u64, num, 0) catch panic("Failed to parse decimal integer", .{}),
+                    };
+
                     tokenizer.IntLiterals.append(.{
                         .value = val,
                         .start = start,
@@ -602,4 +628,63 @@ test "Lexer string" {
     try testing.expectEqual(lexems.StringLiterals[0].start, 11);
     try testing.expectEqual(lexems.StringLiterals[0].line, 0);
     try testing.expectEqual(lexems.StringLiterals[0].column, 10);
+}
+
+test "Lexer should correctly tokenize constant operator ::" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+
+    const lexems = Lexer.analyze(&allocator, "user::\"hello\";");
+    try testing.expectEqual(lexems.LineCount, 1);
+
+    try testing.expectEqualStrings(lexems.Identifiers[0].value, "user");
+    try testing.expectEqual(lexems.Identifiers[0].start, 0);
+    try testing.expectEqual(lexems.Identifiers[0].line, 0);
+    try testing.expectEqual(lexems.Identifiers[0].column, 0);
+    try testing.expectEqual(lexems.StringLiterals[0].start, 7);
+    try testing.expectEqual(lexems.StringLiterals[0].line, 0);
+    try testing.expectEqual(lexems.StringLiterals[0].column, 6);
+    try testing.expectEqualStrings(lexems.StringLiterals[0].value, "hello");
+}
+
+test "int literal" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+
+    const lexems = Lexer.analyze(&allocator, "123;");
+    try testing.expectEqual(lexems.LineCount, 1);
+    try testing.expectEqual(lexems.IntLiterals[0].value, 123);
+    try testing.expectEqual(lexems.IntLiterals[0].start, 0);
+    try testing.expectEqual(lexems.IntLiterals[0].end, 3);
+    try testing.expectEqual(lexems.IntLiterals[0].line, 0);
+    try testing.expectEqual(lexems.IntLiterals[0].column, 0);
+}
+
+test "hexadecimal integer" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+
+    const lexems = Lexer.analyze(&allocator, "0x123;");
+    try testing.expectEqual(lexems.LineCount, 1);
+    try testing.expectEqual(lexems.IntLiterals[0].value, 0x123);
+    try testing.expectEqual(lexems.IntLiterals[0].start, 0);
+    try testing.expectEqual(lexems.IntLiterals[0].end, 5);
+    try testing.expectEqual(lexems.IntLiterals[0].line, 0);
+    try testing.expectEqual(lexems.IntLiterals[0].column, 0);
+}
+
+test "binary int literal" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+    const lexems = Lexer.analyze(&allocator, "0b101;");
+    try testing.expectEqual(lexems.LineCount, 1);
+    try testing.expectEqual(lexems.IntLiterals[0].value, 0b101);
+    try testing.expectEqual(lexems.IntLiterals[0].start, 0);
+    try testing.expectEqual(lexems.IntLiterals[0].end, 5);
+    try testing.expectEqual(lexems.IntLiterals[0].line, 0);
+    try testing.expectEqual(lexems.IntLiterals[0].column, 0);
 }
