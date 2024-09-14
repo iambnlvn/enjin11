@@ -80,7 +80,7 @@ pub const Ref = struct {
 
 pub const Function = struct {
     declaration: Parser.Function,
-    basicBlocs: u32,
+    basicBlocs: []u32,
     argAlloca: []Ref,
 
     fn newFunction(idx: u32) Ref {
