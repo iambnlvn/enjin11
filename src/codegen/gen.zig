@@ -1,4 +1,5 @@
 const std = @import("std");
+const panic = std.debug.panic;
 const Allocator = std.mem.Allocator;
 const IR = @import("./../IR.zig");
 const Arraylist = std.ArrayList;
@@ -28,6 +29,6 @@ pub fn writeExeFile(fileName: []const u8, content: []const u8) void {
     defer file.close();
 
     file.writeAll(content) catch |err| {
-        std.debug.panic("Error writing file: {}\n", .{err});
+        panic("Error writing file: {}\n", .{err});
     };
 }

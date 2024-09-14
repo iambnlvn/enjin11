@@ -317,7 +317,7 @@ pub const Program = struct {
                         .@"struct" => {
                             self.structLiterals[value.getIDX()].refs.append(refrence) catch unreachable;
                         },
-                        else => std.debug.panic("Unsupported constant type"),
+                        else => std.debug.panic("Unsupported constant type", .{}),
                     }
                 },
                 .Instruction => {
@@ -329,7 +329,7 @@ pub const Program = struct {
                 .Arg => {
                     self.functionBuilders.items[self.currentFunction].argAlloca.append(refrence) catch unreachable;
                 },
-                else => std.debug.panic("Unsupported ref type"),
+                else => std.debug.panic("Unsupported ref type", .{}),
             }
         }
 
@@ -360,7 +360,7 @@ pub const Program = struct {
                         .ResolvedInternalFn => {
                             unreachable;
                         },
-                        else => std.debug.panic("Unsupported global expression"),
+                        else => std.debug.panic("Unsupported global expression", .{}),
                     }
                 },
                 .scope => {
@@ -406,7 +406,6 @@ pub const Program = struct {
 
                             return Instruction.Load.new(allocator, self, alloc.baseType, allocRef);
                         },
-
                         .ArithmeticExpr => {
                             const arithmeticExpr = &res.functions[self.currentFunction].scopes[scopeIdx].ArithmeticExpr[exprIdx];
 
@@ -420,15 +419,15 @@ pub const Program = struct {
                                 //Todo: Implement the rest of the arithmetic expressions
                                 // .Div => Instruction.Div.new(allocator, self, lhs, rhs),
                                 // .Mod => Instruction.Mod.new(allocator, self, lhs, rhs),
-                                else => std.debug.panic("Unsupported arithmetic expression"),
+                                else => std.debug.panic("Unsupported arithmetic expression", .{}),
                             };
                         },
                         .InvokeExpr => return self.processInvokeExpr(allocator, fnBuilder, res, ast),
                         //todo: add more cases
-                        else => std.debug.panic("Unsupported scope expression"),
+                        else => std.debug.panic("Unsupported scope expression", .{}),
                     }
                 },
-                else => std.debug.panic("Unsupported expression level"),
+                else => std.debug.panic("Unsupported expression level", .{}),
             }
         }
 
@@ -653,7 +652,7 @@ pub const Program = struct {
 
                                             _ = Instruction.new(allocator, self, rightRef, gep, arrElType);
                                         },
-                                        else => std.debug.panic("Unsupported assignment type"),
+                                        else => std.debug.panic("Unsupported assignment type", .{}),
                                     }
                                 },
                                 .CompoundAssignment => {
@@ -665,7 +664,7 @@ pub const Program = struct {
                                         .add => Instruction.Add.new(allocator, self, left, right),
                                         .sub => Instruction.Sub.new(allocator, self, left, right),
                                         .mul => Instruction.Mul.new(allocator, self, left, right),
-                                        else => std.debug.panic("Unsupported compound assignment"),
+                                        else => std.debug.panic("Unsupported compound assignment", .{}),
                                     };
 
                                     const leftId = compoundAssignment.left.getArrayId(.scope);
@@ -688,7 +687,7 @@ pub const Program = struct {
                                     const prefixScopeAst = fnAst.scopes[ast.prefixScopeIdx];
 
                                     if (prefixScopeAst.statements.len != 1) {
-                                        std.debug.panic("Invalid loop prefix scope");
+                                        std.debug.panic("Invalid loop prefix scope", .{});
                                     }
 
                                     self.appendBlock2CurrentFn(prefixBlock, ast.prefixScopeIdx);
@@ -743,7 +742,7 @@ pub const Program = struct {
                                     }
 
                                     const isElseBlockReturn = fnBuilder.isEmittedReturn;
-                                    // It doesn't make sense to have a return in both the if and else block
+                                    // It doesn't make sense to have a return in both the if and else block(they cannot return a value at the same time)
                                     fnBuilder.isEmittedReturn = isIfBlockReturn and isElseBlockReturn;
 
                                     if (isExitBlockUsed and !fnBuilder.isEmittedReturn) {
@@ -768,10 +767,10 @@ pub const Program = struct {
 
                                     Instruction.Br.new(allocator, self, br.falsyDestBlock.?);
                                 },
-                                else => std.debug.panic("Unsupported statement type"),
+                                else => std.debug.panic("Unsupported statement type", .{}),
                             }
                         },
-                        else => std.debug.panic("Unsupported statement level"),
+                        else => std.debug.panic("Unsupported statement level", .{}),
                     }
                 }
             }
@@ -803,7 +802,7 @@ pub const Program = struct {
                 .GreaterThanOrEqual => .sge,
                 .Equal => .eq,
                 .NotEqual => .ne,
-                else => std.debug.panic("Unsupported comparison"),
+                else => std.debug.panic("Unsupported comparison", .{}),
             };
             return Instruction.Icmp.new(allocator, self, compId, left, right);
         }

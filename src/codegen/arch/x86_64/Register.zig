@@ -1,7 +1,7 @@
 const std = @import("std");
 const IR = @import("./../../../IR.zig");
 const Instruction = @import("./../../../Instruction.zig").Instruction;
-const panic = std.debug.panic;
+const panic = panic;
 
 pub const Indirect = struct {
     ref: IR.Ref,

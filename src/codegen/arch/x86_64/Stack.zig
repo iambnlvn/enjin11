@@ -1,4 +1,5 @@
 const std = @import("std");
+const panic = std.debug.panic;
 const IR = @import("./../../../IR.zig");
 const ArrayList = std.ArrayList;
 const reg = @import("Register.zig");
@@ -56,7 +57,7 @@ pub const Stack = struct {
                 .getElPtr => return self.processGEP(func, prog, ref),
                 else => unreachable,
             }
-            std.debug.panic("Alloc not found", .{});
+            panic("Alloc not found", .{});
         }
 
         pub fn processGEP(
@@ -91,9 +92,9 @@ pub const Stack = struct {
                                     return finalAlloc;
                                 }
                             }
-                            std.debug.panic("alloc not found\n", {});
+                            panic("alloc not found\n", {});
                         },
-                        else => std.debug.panic("invalid id {any}", .{allocationType.getId()}),
+                        else => panic("invalid id {any}", .{allocationType.getId()}),
                     }
                 },
                 .load => {
@@ -116,7 +117,7 @@ pub const Stack = struct {
                     indirectWithOffset.ref = instruction;
                     return indirectWithOffset;
                 },
-                else => std.debug.panic("", .{}),
+                else => panic("", .{}),
             }
         }
     };

@@ -1,4 +1,5 @@
 const std = @import("std");
+const panic = std.debug.panic;
 const _reg = @import("Register.zig");
 const Register = _reg.Register;
 const Indirect = _reg.Indirect;
@@ -145,7 +146,7 @@ fn leaIndirect(reg: Register.ID, indirectReg: Register.ID, indirectOff: i32) Ins
 fn cmpIndirectImmediate(indirectReg: Register.ID, indirectOff: i32, indirectSize: u8, intLiteral: Parser.IntegerLiteral) Instruction {
     const intByteCount: u8 = blk: {
         if (intLiteral.value > std.math.maxInt(u32)) {
-            std.debug.panic("64-bit not supported", .{});
+            panic("64-bit not supported", .{});
         }
         if (intLiteral.value > std.math.maxInt(u16)) break :blk 4;
         if (intLiteral.value > std.math.maxInt(u8)) {
@@ -506,7 +507,7 @@ pub fn fetchLoad(
                     return func.regAllocator.allocateIndirect(loadRef, 0, resSize);
                 },
                 .load, .getElPtr, .icmp => return func.regAllocator.allocateIndirect(func, prog, load.pointer),
-                else => std.debug.panic("Invalid load use", .{}),
+                else => panic("Invalid load use", .{}),
             }
         },
         .load => {
@@ -547,7 +548,7 @@ pub fn fetchLoad(
             //TODO: figure it out
         },
         else => {
-            std.debug.panic("Invalid load pointer", .{});
+            panic("Invalid load pointer", .{});
         },
     }
 }
@@ -582,13 +583,13 @@ pub fn encode(
     const argRegisters = switch (abi) {
         .gnu => sysVArgRegisters[0..],
         .msvc => msvcArgRegisters[0..],
-        else => std.debug.panic("{any} not implemented", .{@tagName(abi)}),
+        else => panic("{any} not implemented", .{@tagName(abi)}),
     };
 
     const stackRegister = switch (abi) {
         .gnu => Register.ID.BP,
         .msvc => Register.ID.SP,
-        else => std.debug.panic("{any} not implemented", .{@tagName(abi)}),
+        else => panic("{any} not implemented", .{@tagName(abi)}),
     };
     _ = stackRegister;
     const functionCount = prog.functions.len;
@@ -682,7 +683,7 @@ pub fn encode(
                 switch (instructionId) {
                     .icmp => processIcmp(prog, function, instruction),
                     // Todo: implement the rest of the instructions
-                    else => std.debug.panic("Instruction not implemented", .{}),
+                    else => panic("Instruction not implemented", .{}),
                     // .add => processAdd(prog, function, instruction),
                     // .sub => processSub(prog, function, instruction),
                     // .mul => processMul(prog, function, instruction),
@@ -709,10 +710,10 @@ fn processIcmp(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) vo
                         leftOperandKind = .Stack;
                         break :blk fetchLoad(prog, func, icmpInstruction.left, ref, true);
                     },
-                    else => std.debug.panic("", .{}), // Note:Add a better debug message
+                    else => panic("", .{}), // Note:Add a better debug message
                 }
             },
-            else => std.debug.panic("", .{}),
+            else => panic("", .{}),
         }
     };
 
@@ -734,7 +735,7 @@ fn processIcmp(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) vo
 
                     func.appendInstruction(cmp);
                 },
-                else => std.debug.panic("Unexpected constant type in processIcmp: {}", .{IR.Constant.getId(icmpInstruction.right)}),
+                else => panic("Unexpected constant type in processIcmp: {}", .{IR.Constant.getId(icmpInstruction.right)}),
             }
         },
         .Instruction => {
@@ -761,9 +762,9 @@ fn processIcmp(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) vo
                         func.appendInstruction(cmpRegStack);
                     } else unreachable;
                 },
-                else => std.debug.panic("Unexpected else branch in processIcmp: invalid icmpInstruction.left value", .{}),
+                else => panic("Unexpected else branch in processIcmp: invalid icmpInstruction.left value", .{}),
             }
         },
-        else => std.debug.panic("Unexpected else branch in processIcmp: invalid icmpInstruction", .{}),
+        else => panic("Unexpected else branch in processIcmp: invalid icmpInstruction", .{}),
     }
 }

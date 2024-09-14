@@ -1,4 +1,5 @@
 const std = @import("std");
+const panic = std.debug.panic();
 const ArrayList = std.ArrayList;
 const Instruction = @import("./genInstruction.zig").GenInstruction;
 const Register = @import("./Register.zig").Register;
@@ -101,7 +102,7 @@ pub const Program = struct {
                             addRspEpilogue = true;
                         }
                     },
-                    else => std.debug.panic("{} not implemented\n", .{abi}),
+                    else => panic("{} not implemented\n", .{abi}),
                 }
             }
             var currentBlockOffset: u32 = 0;
@@ -226,7 +227,7 @@ pub const Program = struct {
                             }
                         },
                         else => {
-                            std.debug.panic("{} not implemented\n", .{abi});
+                            panic("{} not implemented\n", .{abi});
                         },
                     }
                 }
