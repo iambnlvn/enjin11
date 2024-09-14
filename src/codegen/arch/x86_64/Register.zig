@@ -138,7 +138,7 @@ pub const Register = extern union {
 
         const Self = @This();
 
-        fn new(argRegisters: []const Register.ID) Self {
+        pub fn new(argRegisters: []const Register.ID) Self {
             var res: Self = undefined;
             res.argReigsters = argRegisters;
             res.state.occupation.array = std.mem.zeroes([Register.count]occupationType);
@@ -257,7 +257,7 @@ pub const Register = extern union {
         //     panic("No registers have been allocated", .{});
         // }
 
-        fn allocateArg(self: *Self, argIdx: u32, size: u8) Direct {
+        pub fn allocateArg(self: *Self, argIdx: u32, size: u8) Direct {
             const targetRegister = self.argRegisters[argIdx];
             const occupation = &self.state.occupation.array[@intFromEnum(targetRegister)];
 
@@ -360,7 +360,7 @@ pub const Register = extern union {
             return res.direct;
         }
 
-        fn reset(self: *Self) void {
+        pub fn reset(self: *Self) void {
             @memset(self.state.occupation.array[0..], occupationType.None);
         }
 
@@ -369,6 +369,12 @@ pub const Register = extern union {
             return regInt <= @intFromEnum(Register.ID.D) or (regInt >= @intFromEnum(Register.ID.R8) and regInt <= @intFromEnum(Register.ID.R11));
         }
 
-        // Todo: Implement ways to alter the allocation
+        pub fn alterAllocDirect(self: *Self, reg: Register.ID, ref: IR.Ref) void {
+            const regIdx = @intFromEnum(reg);
+            var destRegOccupation = &self.state.occupation.array[regIdx];
+            if (destRegOccupation.* == .None) panic("Register {s} is not allocated or busy", .{@tagName(reg)});
+            var destReg = &self.state.registers.array[regIdx];
+            destReg.direct.ref = ref;
+        }
     };
 };
