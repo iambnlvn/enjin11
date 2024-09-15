@@ -55,6 +55,9 @@ pub const Keyword = struct {
     column: u64,
 
     pub const ID = enum {
+        //? should I change the syntax and the whole lexer to be more like C language?
+        // @"const",
+        // let,
         @"if",
         @"else",
         @"while",
@@ -93,6 +96,31 @@ pub const Tokenizer = struct {
     StringLiterals: ArrayList(StringLiteral),
     Signs: ArrayList(Sign),
     Operators: ArrayList(Operator),
+
+    pub fn init(allocator: *Allocator) Tokenizer {
+        return .{
+            .CharLiterals = ArrayList(CharLiteral).init(allocator.*),
+            .Identifiers = ArrayList(Identifier).init(allocator.*),
+            .IntLiterals = ArrayList(IntLiteral).init(allocator.*),
+            .Keywords = ArrayList(Keyword).init(allocator.*),
+            .LineCount = 0,
+            .Operators = ArrayList(Operator).init(allocator.*),
+            .Signs = ArrayList(Sign).init(allocator.*),
+            .StringLiterals = ArrayList(StringLiteral).init(allocator.*),
+            .tokens = ArrayList(Token).init(allocator.*),
+            .currentIdx = 0,
+        };
+    }
+    pub fn deinit(self: *Tokenizer) void {
+        self.tokens.deinit();
+        self.Identifiers.deinit();
+        self.Keywords.deinit();
+        self.IntLiterals.deinit();
+        self.CharLiterals.deinit();
+        self.StringLiterals.deinit();
+        self.Signs.deinit();
+        self.Operators.deinit();
+    }
 };
 
 pub const Identifier = struct {
@@ -120,8 +148,6 @@ pub const CharLiteral = packed struct {
 pub const Sign = CharLiteral;
 pub const StringLiteral = Identifier;
 
-pub fn main() !void {}
-
 pub const Lexer = struct {
     pub const Lexems = struct {
         Tokens: []Token,
@@ -135,22 +161,10 @@ pub const Lexer = struct {
         LineCount: u64,
     };
 
-    pub fn analyze(allocator: *Allocator, src: []const u8) Lexems {
-        var tokenizer = Tokenizer{
-            .currentIdx = 0,
-            .LineCount = 0,
-            .tokens = ArrayList(Token).init(allocator.*),
-            .IntLiterals = ArrayList(IntLiteral).init(allocator.*),
-            .CharLiterals = ArrayList(CharLiteral).init(allocator.*),
-            .StringLiterals = ArrayList(StringLiteral).init(allocator.*),
-            .Identifiers = ArrayList(Identifier).init(allocator.*),
-            .Keywords = ArrayList(Keyword).init(allocator.*),
-            .Signs = ArrayList(Sign).init(allocator.*),
-            .Operators = ArrayList(Operator).init(allocator.*),
-        };
+    pub fn analyze(_tokenizer: *Tokenizer, src: []const u8) Lexems {
+        var tokenizer = _tokenizer.*;
 
         var currentLineStart: u64 = 0;
-
         while (tokenizer.currentIdx < src.len) : (tokenizer.currentIdx += 1) {
             const c = src[tokenizer.currentIdx];
 
@@ -182,6 +196,7 @@ pub const Lexer = struct {
                     }
                     end = tokenizer.currentIdx;
                     tokenizer.currentIdx -= 1;
+                    // const identifier = src[start..end];
                     if (std.meta.stringToEnum(Keyword.ID, src[start..end])) |kw| {
                         tokenizer.Keywords.append(.{
                             .value = kw,
@@ -190,13 +205,25 @@ pub const Lexer = struct {
                             .column = col,
                         }) catch unreachable;
                         tokenizer.tokens.append(.Keyword) catch unreachable;
-                    } else {
-                        tokenizer.Identifiers.append(.{
-                            .value = src[start..end],
-                            .start = start,
-                            .line = tokenizer.LineCount,
-                            .column = col,
-                        }) catch unreachable;
+                    }
+                    // else if (std.mem.eql(u8, identifier, "const")) {
+                    //     tokenizer.Keywords.append(.{
+                    //         .value = Keyword.ID.@"const",
+                    //         .start = start,
+                    //         .line = tokenizer.LineCount,
+                    //         .column = col,
+                    //     }) catch unreachable;
+                    //     tokenizer.tokens.append(.Keyword) catch unreachable;
+                    // } else if (std.mem.eql(u8, identifier, "let")) {
+                    //     tokenizer.Keywords.append(.{
+                    //         .value = Keyword.ID.let,
+                    //         .start = start,
+                    //         .line = tokenizer.LineCount,
+                    //         .column = col,
+                    //     }) catch unreachable;
+                    //     tokenizer.tokens.append(.Keyword) catch unreachable;
+                    // }
+                    else {
                         tokenizer.Identifiers.append(.{
                             .value = src[start..end],
                             .start = start,
@@ -603,8 +630,30 @@ pub const Lexer = struct {
         };
     }
     pub fn printTokens(lexems: Lexems) void {
+        // this one is verbose
         for (lexems.Tokens, 0..) |token, idx| {
-            print("Token: {}, AT: {d}\n", .{ token, idx });
+            print("Token: {s}, AT: {d}\n", .{ @tagName(token), idx });
+        }
+        for (lexems.Identifiers) |identifier| {
+            print("Identifier: {s}, AT: {d}:{d}\n", .{ identifier.value, identifier.line, identifier.column });
+        }
+        for (lexems.IntLiterals) |intLiteral| {
+            print("IntLiteral: {d}, AT: {d}:{d}\n", .{ intLiteral.value, intLiteral.line, intLiteral.column });
+        }
+        for (lexems.CharLiterals) |charLiteral| {
+            print("CharLiteral: {c}, AT: {d}:{d}\n", .{ charLiteral.value, charLiteral.line, charLiteral.column });
+        }
+        for (lexems.StringLiterals) |stringLiteral| {
+            print("StringLiteral: {s}, AT: {d}:{d}\n", .{ stringLiteral.value, stringLiteral.line, stringLiteral.column });
+        }
+        for (lexems.Keywords) |keyword| {
+            print("Keyword: {s}, AT: {d}:{d}\n", .{ @tagName(keyword.value), keyword.line, keyword.column });
+        }
+        for (lexems.Signs) |sign| {
+            print("Sign: [{c}], AT: {d}:{d}\n", .{ sign.value, sign.line, sign.column });
+        }
+        for (lexems.Operators) |op| {
+            print("Operator: {s}, AT: {d}:{d}\n", .{ @tagName(op.value), op.line, op.column });
         }
     }
 };
@@ -612,17 +661,24 @@ pub const Lexer = struct {
 // Note: it also should be done from the outside, not from the inside of the Lexer.analyze
 test "Lexer" {
     const src = "struct { \n return ; \n }";
-    var allocator = std.testing.allocator;
-    const lexems = Lexer.analyze(&allocator, src);
-    // print("LEXEMS: {any}", .{lexems});
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+    var tokenizer = Tokenizer.init(&allocator);
+    const lexems = Lexer.analyze(&tokenizer, src);
+    print("LEXEMS: {any}", .{lexems});
 
     try testing.expectEqual(lexems.LineCount, 3);
-    Lexer.printTokens(lexems);
+    // Lexer.printTokens(lexems);
 }
 test "Lexer string" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+    var tokenizer = Tokenizer.init(&allocator);
     const src = "const a = \"Hey mom\";";
-    var allocator = std.testing.allocator;
-    const lexems = Lexer.analyze(&allocator, src);
+
+    const lexems = Lexer.analyze(&tokenizer, src);
     try testing.expectEqual(lexems.LineCount, 1);
     try testing.expectEqualStrings(lexems.StringLiterals[0].value, "Hey mom");
     try testing.expectEqual(lexems.StringLiterals[0].start, 11);
@@ -634,8 +690,8 @@ test "Lexer should correctly tokenize constant operator ::" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
-
-    const lexems = Lexer.analyze(&allocator, "user::\"hello\";");
+    var tokenizer = Tokenizer.init(&allocator);
+    const lexems = Lexer.analyze(&tokenizer, "user::\"hello\";");
     try testing.expectEqual(lexems.LineCount, 1);
 
     try testing.expectEqualStrings(lexems.Identifiers[0].value, "user");
@@ -646,14 +702,15 @@ test "Lexer should correctly tokenize constant operator ::" {
     try testing.expectEqual(lexems.StringLiterals[0].line, 0);
     try testing.expectEqual(lexems.StringLiterals[0].column, 6);
     try testing.expectEqualStrings(lexems.StringLiterals[0].value, "hello");
+    // Lexer.printTokens(lexems);
 }
 
 test "int literal" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
-
-    const lexems = Lexer.analyze(&allocator, "123;");
+    var tokenizer = Tokenizer.init(&allocator);
+    const lexems = Lexer.analyze(&tokenizer, "123;");
     try testing.expectEqual(lexems.LineCount, 1);
     try testing.expectEqual(lexems.IntLiterals[0].value, 123);
     try testing.expectEqual(lexems.IntLiterals[0].start, 0);
@@ -666,8 +723,8 @@ test "hexadecimal integer" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
-
-    const lexems = Lexer.analyze(&allocator, "0x123;");
+    var tokenizer = Tokenizer.init(&allocator);
+    const lexems = Lexer.analyze(&tokenizer, "0x123;");
     try testing.expectEqual(lexems.LineCount, 1);
     try testing.expectEqual(lexems.IntLiterals[0].value, 0x123);
     try testing.expectEqual(lexems.IntLiterals[0].start, 0);
@@ -680,11 +737,52 @@ test "binary int literal" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     var allocator = arena.allocator();
-    const lexems = Lexer.analyze(&allocator, "0b101;");
+    var tokenizer = Tokenizer.init(&allocator);
+    const lexems = Lexer.analyze(&tokenizer, "0b101;");
     try testing.expectEqual(lexems.LineCount, 1);
     try testing.expectEqual(lexems.IntLiterals[0].value, 0b101);
     try testing.expectEqual(lexems.IntLiterals[0].start, 0);
     try testing.expectEqual(lexems.IntLiterals[0].end, 5);
     try testing.expectEqual(lexems.IntLiterals[0].line, 0);
     try testing.expectEqual(lexems.IntLiterals[0].column, 0);
+}
+
+//TODO: think about const and let later
+// test "const keyword" {
+//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+//     defer arena.deinit();
+//     var allocator = arena.allocator();
+//     const tokenizer = Tokenizer.init(&allocator);
+//     const lexems = Lexer.analyze(&tokenizer, "const;");
+//     try testing.expectEqual(lexems.LineCount, 1);
+//     try testing.expectEqual(lexems.Keywords[0].value, Keyword.ID.@"const");
+//     try testing.expectEqual(lexems.Keywords[0].start, 0);
+//     try testing.expectEqual(lexems.Keywords[0].line, 0);
+//     try testing.expectEqual(lexems.Keywords[0].column, 0);
+// }
+
+// test "let keyword" {
+//     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+//     defer arena.deinit();
+//     var allocator = arena.allocator();
+//     const tokenizer = Tokenizer.init(&allocator);
+//     const lexems = Lexer.analyze(&tokenizer, "let;");
+//     try testing.expectEqual(lexems.LineCount, 1);
+//     try testing.expectEqual(lexems.Keywords[0].value, Keyword.ID.let);
+//     try testing.expectEqual(lexems.Keywords[0].start, 0);
+//     try testing.expectEqual(lexems.Keywords[0].line, 0);
+//     try testing.expectEqual(lexems.Keywords[0].column, 0);
+// }
+
+test "identifer" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var allocator = arena.allocator();
+    var tokenizer = Tokenizer.init(&allocator);
+    const lexems = Lexer.analyze(&tokenizer, "a;");
+    try testing.expectEqual(lexems.LineCount, 1);
+    try testing.expectEqualStrings(lexems.Identifiers[0].value, "a");
+    try testing.expectEqual(lexems.Identifiers[0].start, 0);
+    try testing.expectEqual(lexems.Identifiers[0].line, 0);
+    try testing.expectEqual(lexems.Identifiers[0].column, 0);
 }

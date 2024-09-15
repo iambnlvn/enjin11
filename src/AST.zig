@@ -8,6 +8,8 @@ const Lexer = @import("Lexer.zig").Lexer;
 const ParserEngine = @import("ParserEngine.zig").ParserEngine;
 const Parser = @import("Parser.zig");
 const Type = @import("Type.zig");
+const Tokenizer = @import("Lexer.zig").Tokenizer;
+
 pub const AST = struct {
     modules: [*]Module,
     moduleNames: [*][]const u8,
@@ -64,7 +66,8 @@ pub const AST = struct {
             defer fileHand.close();
             break :blk fileHand.readToEndAlloc(allocator.*, 0xffffffff) catch unreachable;
         };
-        const lexer = Lexer.analyze(allocator, fileContent);
+        var tokenizer = Tokenizer.init(allocator);
+        const lexer = Lexer.analyze(&tokenizer, fileContent);
         var parser = ParserEngine{ .allocator = allocator, .fnBuilder = undefined, .lexer = .{
             .nextIdx = 0,
             .counters = std.mem.zeroes(ParserEngine.countersType),
@@ -96,9 +99,9 @@ pub const AST = struct {
 
         const tokenCount = parser.lexer.tokens.len;
         while (parser.lexer.nextIdx < tokenCount) {
-            const topLevelDeclarationNameTOken = parser.lexer.tokens[parser.lexer.nextIdx];
-            if (topLevelDeclarationNameTOken != .Identifier) {
-                std.debug.panic("Top level declaration must start with an identifier", .{});
+            const topLevelDeclarationNameToken = parser.lexer.tokens[parser.lexer.nextIdx];
+            if (topLevelDeclarationNameToken != .Identifier) {
+                std.debug.panic("Top level declaration must start with an identifier {s}", .{@tagName(topLevelDeclarationNameToken)});
             }
 
             const tldName = parser.getAndConsume(.Identifier).value;
@@ -300,3 +303,22 @@ pub const AST = struct {
         return self.parseModule(allocator, sourceFile, target, parentModule);
     }
 };
+
+test "parseModule" {
+    var allocator = std.heap.page_allocator;
+    var ast = AST.parse(&allocator, "src/test.sig", .{
+        .os = undefined,
+        .abi = undefined,
+        .cpu = undefined,
+        .ofmt = undefined,
+    });
+    const entity = ast.parseModule(&allocator, "src/test.sig", .{
+        .os = undefined,
+        .abi = undefined,
+        .cpu = undefined,
+        .ofmt = undefined,
+    }, null);
+    // TODO!: fix this
+    std.debug.print("Entity value {any}", .{entity.getLevel()});
+    try std.testing.expectEqual(ast.moduleNames[0], "src/test.sig");
+}
