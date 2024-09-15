@@ -42,7 +42,7 @@ pub const Stack = struct {
             }) catch unreachable;
         }
 
-        fn getAlloc(
+        pub fn getAlloc(
             self: *Self,
             func: *Program.Function,
             prog: *const IR.Program,

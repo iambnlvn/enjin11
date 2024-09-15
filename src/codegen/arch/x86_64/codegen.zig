@@ -591,7 +591,7 @@ pub fn encode(
         .msvc => Register.ID.SP,
         else => panic("{any} not implemented", .{@tagName(abi)}),
     };
-    _ = stackRegister;
+
     const functionCount = prog.functions.len;
     var functions = std.ArrayList(Program.Function).initCapacity(allocator.*, functionCount) catch unreachable;
 
@@ -682,12 +682,12 @@ pub fn encode(
                 _ = instructionIdx;
                 switch (instructionId) {
                     .icmp => processIcmp(prog, function, instruction),
+                    .add => processAdd(prog, function, instruction, stackRegister),
+                    .memCopy => processMemCopy(prog, function, instruction),
                     // Todo: implement the rest of the instructions
-                    else => panic("Instruction not implemented", .{}),
-                    // .add => processAdd(prog, function, instruction),
                     // .sub => processSub(prog, function, instruction),
                     // .mul => processMul(prog, function, instruction),
-                    // .memCopy => processMemCopy(prog, function, instruction),
+                    else => panic("Instruction not implemented", .{}),
                 }
             }
         }
@@ -710,10 +710,10 @@ fn processIcmp(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) vo
                         leftOperandKind = .Stack;
                         break :blk fetchLoad(prog, func, icmpInstruction.left, ref, true);
                     },
-                    else => panic("", .{}), // Note:Add a better debug message
+                    else => panic("Unexpected instructionId in processIcmp: {any}", .{instructionId}),
                 }
             },
-            else => panic("", .{}),
+            else => panic("Unexpected icmpInstruction.left in processIcmp: {any}", .{IR.Constant.getId(icmpInstruction.left)}),
         }
     };
 
@@ -766,5 +766,171 @@ fn processIcmp(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) vo
             }
         },
         else => panic("Unexpected else branch in processIcmp: invalid icmpInstruction", .{}),
+    }
+}
+
+fn processAdd(prog: *const IR.Program, func: *Program.Function, addRef: IR.Ref, stackReg: Register.ID) void {
+    const addInstruction = prog.instructions.add[addRef.getIDX()];
+
+    switch (addInstruction.left) {
+        .Instruction => {
+            const instructionId = IrInstruction.getId(addInstruction.left);
+            switch (instructionId) {
+                .load => {
+                    const firstOpAllocation = fetchLoad(prog, func, addInstruction.left, addRef, true);
+
+                    switch (addInstruction.right.getId()) {
+                        .Constant => {
+                            switch (IR.Constant.getId(addInstruction.right)) {
+                                .Int => {
+                                    const secondOpIntLiteral = prog.integerLiterals[addInstruction.right.getIDX()];
+                                    if (secondOpIntLiteral.value == 0) return;
+
+                                    const regSize = @as(u8, @intCast(firstOpAllocation.size));
+                                    const loadReg = func.regAllocator.allocateDirect(addInstruction.left, regSize);
+                                    const movRegInd = moveRegIndirect(loadReg.register, @as(u8, @intCast(firstOpAllocation.size)), firstOpAllocation.register, firstOpAllocation.offset);
+
+                                    if (firstOpAllocation.register != stackReg) {
+                                        func.regAllocator.free(firstOpAllocation.register);
+                                    }
+
+                                    func.regAllocator.alterAllocDirect(loadReg.register, addRef);
+                                    func.appendInstruction(movRegInd);
+
+                                    if (secondOpIntLiteral.value == 1) {
+                                        func.appendInstruction(incReg(loadReg.register, regSize));
+                                    } else {
+                                        const addRegLit = addRegImm(loadReg.register, regSize, secondOpIntLiteral);
+                                        func.appendInstruction(addRegLit);
+                                    }
+                                },
+                                else => panic("Unexpected constant type in processAdd: {any}", .{IR.Constant.getId(addInstruction.right)}),
+                            }
+                        },
+                        .Instruction => {
+                            switch (IrInstruction.getId(addInstruction.right)) {
+                                .load => {
+                                    const secOpLoad = prog.instructions.load[addInstruction.right.getIDX()];
+                                    const secOpAllocation = func.stackAllocator.getAlloc(func, prog, secOpLoad.pointer);
+
+                                    const loadReg = func.regAllocator.allocateDirect(addInstruction.right, @as(u8, @intCast(firstOpAllocation.size)));
+                                    const movRegStack = moveRegIndirect(loadReg.register, @as(u8, @intCast(firstOpAllocation.size)), firstOpAllocation.register, firstOpAllocation.offset);
+                                    func.appendInstruction(movRegStack);
+
+                                    const addRegStack = addRegIndirect(loadReg.register, @as(u8, @intCast(firstOpAllocation.size)), secOpAllocation.register, secOpAllocation.offset);
+                                    func.regAllocator.alterAllocDirect(loadReg.register, addRef);
+                                    func.appendInstruction(addRegStack);
+                                },
+                                .Call => {
+                                    // TODO: figure it out
+                                    unreachable;
+                                },
+                                else => panic("Unexpected branch in processAdd: invalid addInstruction.right value", .{}),
+                            }
+                        },
+                        else => panic("Unexpected branch in processAdd: invalid addInstruction.right", .{}),
+                    }
+                },
+                .Call => {
+                    const returnedCallReg = func.regAllocator.fetchDirect(prog, addInstruction.left, addRef) orelse unreachable;
+
+                    switch (addInstruction.right.getId()) {
+                        .Constant => {
+                            switch (IR.Constant.getId(addInstruction.right)) {
+                                .Int => {
+                                    const secOpIntLiteral = prog.integerLiterals[addInstruction.right.getIDX()];
+                                    if (secOpIntLiteral.value == 0) return;
+
+                                    if (secOpIntLiteral.value == 1) {
+                                        func.appendInstruction(incReg(returnedCallReg.register, returnedCallReg.size));
+                                    } else {
+                                        const addRegLit = addRegImm(returnedCallReg.register, returnedCallReg.size, secOpIntLiteral);
+                                        func.appendInstruction(addRegLit);
+                                    }
+                                },
+                                else => panic("Unexpected constant type in processAdd: {any}", .{IR.Constant.getId(addInstruction.right)}),
+                            }
+                        },
+                        else => panic("Unexpected branch in processAdd: invalid addInstruction.right", .{}),
+                    }
+                },
+                .Mul => {
+                    const returnedCallReg = func.regAllocator.fetchDirect(prog, addInstruction.left, addRef) orelse unreachable;
+                    switch (addInstruction.right.getId()) {
+                        .Constant => {
+                            switch (IR.Constant.getId(addInstruction.right)) {
+                                .Int => {
+                                    const secOpIntLiteral = prog.integerLiterals[addInstruction.right.getIDX()];
+                                    if (secOpIntLiteral.value == 0) return;
+
+                                    if (secOpIntLiteral.value == 1) {
+                                        func.appendInstruction(incReg(returnedCallReg.register, returnedCallReg.size));
+                                    } else {
+                                        const addRegLit = addRegImm(returnedCallReg.register, returnedCallReg.size, secOpIntLiteral);
+                                        func.appendInstruction(addRegLit);
+                                    }
+                                },
+                                else => panic("Unexpected constant type in processAdd: {any}", .{IR.Constant.getId(addInstruction.right)}),
+                            }
+                        },
+                        .Instruction => {
+                            const rightInstructionId = IrInstruction.getId(addInstruction.right);
+                            switch (rightInstructionId) {
+                                .mul => {
+                                    const rightReg = func.regAllocator.fetchDirect(prog, addInstruction.right, addRef) orelse unreachable;
+                                    func.regAllocator.free(returnedCallReg.register);
+
+                                    const addMulMul = addRegReg(returnedCallReg.register, rightReg.register, returnedCallReg.size);
+                                    func.appendInstruction(addMulMul);
+
+                                    _ = func.regAllocator.allocateDirect(addRef, returnedCallReg.size);
+                                },
+                                else => panic("Unexpected branch in processAdd: invalid addInstruction.right value", .{}),
+                            }
+                        },
+                        else => panic("Unexpected branch in processAdd: invalid addInstruction.right", .{}),
+                    }
+                },
+                else => panic("Unexpected branch in processAdd: invalid addInstruction.left", .{}),
+            }
+        },
+        else => panic("Unexpected branch in processAdd: invalid addInstruction", .{}),
+    }
+}
+
+fn processMemCopy(prog: *const IR.Program, data: *Data, func: *Program.Function, instruction: IR.Ref) void {
+    const memCopyInstruction = prog.instructions.memCopy[instruction.getIDX()];
+    const memCopySize = @as(u8, memCopyInstruction.size);
+
+    const sourceId = memCopyInstruction.source.getId();
+    switch (sourceId) {
+        .Constant => {
+            const sourceConstId = IR.Constant.getId(memCopyInstruction.source);
+            const idx = switch (sourceConstId) {
+                .Array => @intFromEnum(Data.Kind.array),
+                .@"struct" => @intFromEnum(Data.Kind.structure),
+                else => panic("Unexpected sourceConstId in processMemCopy: {s}", .{@tagName(sourceConstId)}),
+            };
+
+            const dataBufferOffset = data.offsets[idx].items[memCopyInstruction.source.getIDX()];
+            const temp = func.regAllocator.allocateDirect(memCopyInstruction.destination, memCopySize);
+
+            const movDs2Reg = moveRegDsRel(temp.register, temp.size, dataBufferOffset);
+            func.appendInstruction(movDs2Reg);
+
+            func.regAllocator.free(temp.register);
+
+            const stackAllocation = func.stackAllocator.getAlloc(func, prog, memCopyInstruction.destination);
+            const movRegStack = moveIndirectReg(
+                stackAllocation.register,
+                stackAllocation.offset,
+                @as(u8, @intCast(stackAllocation.size)),
+                temp.register,
+                temp.size,
+            );
+
+            func.appendInstruction(movRegStack);
+        },
+        else => panic("Unexpected sourceId in processMemCopy: {any}", .{sourceId}),
     }
 }

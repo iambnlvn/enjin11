@@ -304,7 +304,7 @@ pub const Register = extern union {
             panic("No arg registers available or ready", .{});
         }
 
-        fn allocateReturn(self: *Self, ref: IR.Ref, size: u8) Direct {
+        pub fn allocateReturn(self: *Self, ref: IR.Ref, size: u8) Direct {
             const regA = @intFromEnum(Register.ID.A);
             const occupation = &self.state.occupation.byType.legacy[regA];
 
@@ -326,7 +326,7 @@ pub const Register = extern union {
             panic("Register A is already occupied", .{});
         }
 
-        fn fetchDirect(self: *Self, program: *IR.Program, ref: IR.Ref, use: IR.Ref) ?Direct {
+        pub fn fetchDirect(self: *Self, program: *IR.Program, ref: IR.Ref, use: IR.Ref) ?Direct {
             for (self.state.occupation.byType.legacy, 0..) |*occupation, idx| {
                 if (occupation.* == .Direct) {
                     const reg = &self.state.registers.byType.legacy[idx];
@@ -344,7 +344,7 @@ pub const Register = extern union {
             return null;
         }
 
-        fn fetchArg(self: *Self, argIdx: u32) Direct {
+        pub fn fetchArg(self: *Self, argIdx: u32) Direct {
             const argReg = self.argRegisters[argIdx];
             const occupation = self.state.occupation.array[@intFromEnum(argReg)];
 
