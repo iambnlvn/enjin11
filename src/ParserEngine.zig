@@ -508,7 +508,7 @@ pub const ParserEngine = struct {
     }
 
     pub fn parseStruct(self: *Self, name: []const u8) Type {
-        if (self.lexer.tokens[self.lexer.nextIdx] != .Sign and self.getToken(.sign).value != '{') {
+        if (self.lexer.tokens[self.lexer.nextIdx] != .Sign and self.getToken(.Sign).value != '{') {
             std.debug.panic("Expected left brace for struct declaration but got {any}", .{self.lexer.tokens[self.lexer.nextIdx]});
         }
 

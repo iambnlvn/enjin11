@@ -808,7 +808,7 @@ pub const Program = struct {
         }
 
         pub fn introspectForAlloc(self: *Self, func: *const Parser.Function.Internal, scopeIdx: u32) bool {
-            var scope = func.scopes[scopeIdx];
+            const scope = func.scopes[scopeIdx];
 
             for (scope.statements) |statement| {
                 const statementId = statement.getArrayId(.Scope);
