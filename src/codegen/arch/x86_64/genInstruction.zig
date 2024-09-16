@@ -74,13 +74,13 @@ pub const GenInstruction = struct {
         bytes: [maxBytesBeforeOpResolution]u8,
         unknownOp: UnknownOp,
 
-        const UnknownOp = extern struct {
+        pub const UnknownOp = extern struct {
             idx: u32,
             size: u8,
             offset: u8,
             kind: Kind,
 
-            const Kind = enum(u8) {
+            pub const Kind = enum(u8) {
                 Immediate,
                 RelGlobal,
                 RelExternal,

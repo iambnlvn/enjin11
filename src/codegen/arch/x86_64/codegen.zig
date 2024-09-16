@@ -72,10 +72,10 @@ fn jccRel32(jmp: JumpOpcode, opIdx: u32) Instruction {
     return Instruction.Unresolved.new(b[0..], opIdx, .RelLabel, 4, b.len);
 }
 
-fn jmpRel32(opIdx: u32) Instruction {
+fn jmpRel32(opIdx: u32, opKind: Instruction.Unresolved.UnknownOp.Kind) Instruction {
     const b = [_]u8{0xe9};
 
-    return Instruction.Unresolved.new(b[0..], opIdx, .RelLabel, 4, b.len);
+    return Instruction.Unresolved.new(b[0..], opIdx, opKind, 4, b.len);
 }
 const JumpOpcode = enum(u8) {
     jge = 0x7d,
@@ -686,9 +686,10 @@ pub fn encode(
                     .add => processAdd(prog, function, instruction, stackRegister),
                     .memCopy => processMemCopy(prog, &data, function, instruction),
                     .sub => processSub(prog, function, instruction, stackRegister),
-
                     .mul => processMul(prog, function, instruction),
-                    // Todo: implement the rest of the instructions
+                    .br => processBr(prog, function, irFunc, basicBlockIter, instruction),
+                    .load => {},
+                    // TODO: implement the rest of the instructions
                     else => panic("Instruction not implemented", .{}),
                 }
             }
@@ -1081,4 +1082,41 @@ fn processMul(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) voi
         else => panic("Unexpected branch in processMul: invalid mulInstruction.right", .{}),
     }
     if (shouldLoadFirstArg) unreachable;
+}
+
+fn processBr(
+    prog: *const IR.Program,
+    func: *Program.Function,
+    irFunc: IR.Function,
+    basicBlockIdx: u32,
+    ref: IR.Ref,
+) void {
+    const brInstruction = prog.instructions.br[ref.getIDX()];
+
+    if (brInstruction.condition) |branchCond| {
+        const branchCondId = IrInstruction.getId(branchCond);
+
+        switch (branchCondId) {
+            .icmp => {
+                const icmpId = prog.instructions.icmp[branchCond.getIDX()];
+                const jumpOpCode = JumpOpcode.get(icmpId);
+
+                if (prog.getBlockFnIdx(brInstruction.destBasicBlock) != prog.getBlockFnIdx(irFunc.basicBlocs[basicBlockIdx + 1])) {
+                    unreachable;
+                }
+
+                const condJmp = jccRel32(jumpOpCode, prog.getBlockFnIdx(brInstruction.falsyDestBlock.?));
+                func.appendInstruction(condJmp);
+            },
+            else => panic("Unexpected branchCondId in processBr: {any}", .{branchCondId}),
+        }
+    } else {
+        const brExpBasicBlock = prog.getBlockFnIdx(brInstruction.destBasicBlock);
+        const nextFnBasicBlock = prog.getBlockFnIdx(irFunc.basicBlocs[basicBlockIdx + 1]);
+
+        if (brExpBasicBlock != nextFnBasicBlock) {
+            const unCondJmp = jmpRel32(brExpBasicBlock, .RelLabel);
+            func.appendInstruction(unCondJmp);
+        } else {}
+    }
 }
