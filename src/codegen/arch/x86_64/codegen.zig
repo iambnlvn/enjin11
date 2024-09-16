@@ -11,6 +11,7 @@ const _prog = @import("./Program.zig");
 const Program = _prog.Program;
 const BackWardPatch = _prog.BackwardPatch;
 const Stack = @import("Stack.zig").Stack;
+const Type = @import("./../../../Type.zig");
 
 const sysVArgRegisters = [_]Register.ID{
     .DI,
@@ -685,8 +686,9 @@ pub fn encode(
                     .add => processAdd(prog, function, instruction, stackRegister),
                     .memCopy => processMemCopy(prog, function, instruction),
                     .sub => processSub(prog, function, instruction, stackRegister),
+
+                    .mul => processMul(prog, function, instruction),
                     // Todo: implement the rest of the instructions
-                    // .mul => processMul(prog, function, instruction),
                     else => panic("Instruction not implemented", .{}),
                 }
             }
@@ -937,8 +939,8 @@ fn processMemCopy(prog: *const IR.Program, data: *Data, func: *Program.Function,
 
 fn processSub(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref, stackReg: Register.ID) void {
     const subInstruction = prog.instructions.sub[ref.getIDX()];
-    var shouldLoadFirstArg = false;
-    var firstOpKind: OperandKind = undefined;
+    const shouldLoadFirstArg = false;
+    const firstOpKind: OperandKind = undefined;
     _ = firstOpKind; // this should be used for moving the first operand to a register when processing instruction
     var secondOpKind: OperandKind = undefined;
 
@@ -993,6 +995,90 @@ fn processSub(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref, sta
             }
         },
         else => panic("Unexpected branch in processSub: invalid subInstruction.right", .{}),
+    }
+    if (shouldLoadFirstArg) unreachable;
+}
+
+fn processMul(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref) void {
+    const mulInstruction = prog.instructions.mul[ref.getIDX()];
+    const shouldLoadFirstArg = false;
+
+    var firstOpKind: OperandKind = undefined;
+    var secondOpKind: OperandKind = undefined;
+    var signedness: Type.Integer.Signedness = undefined;
+
+    const firstOpAllocation = blk: {
+        switch (mulInstruction.left.getId()) {
+            .Instruction => {
+                const instructionId = IrInstruction.getId(mulInstruction.left);
+                switch (instructionId) {
+                    .load => {
+                        firstOpKind = .Stack;
+                        const load = prog.instructions.load[mulInstruction.left.getIDX()];
+                        signedness = Type.Integer.getSignedness(load.type);
+                        break :blk func.stackAllocator.getAlloc(func, prog, load.pointer);
+                    },
+                    else => panic("Unexpected instructionId in processMul: {any}", .{instructionId}),
+                }
+            },
+            else => panic("Unexpected mulInstruction.left in processMul: {any}", .{IR.Constant.getId(mulInstruction.left)}),
+        }
+    };
+
+    switch (mulInstruction.right.getId()) {
+        .Constant => {
+            switch (IR.Constant.getId(mulInstruction.right)) {
+                .Int => {
+                    secondOpKind = .Immediate;
+                    const intLit = prog.integerLiterals[mulInstruction.right.getIDX()];
+                    if (intLit.value == 0) return;
+
+                    if (firstOpKind == .Stack) {
+                        const regSize = @as(u8, @intCast(firstOpAllocation.size));
+                        const loadReg = func.regAllocator.allocateDirect(mulInstruction.right, regSize);
+                        const movRegStack = moveRegIndirect(
+                            loadReg.register,
+                            @as(u8, @intCast(firstOpAllocation.size)),
+                            firstOpAllocation.register,
+                            firstOpAllocation.offset,
+                        );
+                        func.regAllocator.alterAllocDirect(loadReg.register, ref);
+                        func.appendInstruction(movRegStack);
+                        //TODO: implment mulRegImm and handle signedness
+                    } else unreachable;
+                },
+                else => panic("Unexpected constant type in processMul: {any}", .{IR.Constant.getId(mulInstruction.right)}),
+            }
+        },
+        .Instruction => {
+            switch (IrInstruction.getId(mulInstruction.right)) {
+                .load => {
+                    secondOpKind = .Stack;
+                    const load = prog.instructions.load[mulInstruction.right.getIDX()];
+                    const secondOpAllocation = func.stackAllocator.getAlloc(func, prog, load.pointer);
+
+                    if (firstOpKind == .Stack) {
+                        const regSize = @as(u8, @intCast(firstOpAllocation.size));
+                        const loadReg = func.regAllocator.allocateDirect(mulInstruction.right, regSize);
+                        const movRegStack = moveRegIndirect(
+                            loadReg.register,
+                            @as(u8, @intCast(firstOpAllocation.size)),
+                            firstOpAllocation.register,
+                            firstOpAllocation.offset,
+                        );
+                        func.appendInstruction(movRegStack);
+                        func.regAllocator.alterAllocDirect(loadReg.register, ref);
+
+                        if (signedness == .Signed) {
+                            const imulRegStack = imulRegInd(loadReg.register, @as(u8, @intCast(firstOpAllocation.size)), firstOpAllocation.register, secondOpAllocation.offset);
+                            func.appendInstruction(imulRegStack);
+                        } else unreachable;
+                    } else unreachable;
+                },
+                else => panic("Unexpected branch in processMul: invalid mulInstruction.right value", .{}),
+            }
+        },
+        else => panic("Unexpected branch in processMul: invalid mulInstruction.right", .{}),
     }
     if (shouldLoadFirstArg) unreachable;
 }

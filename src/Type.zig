@@ -32,7 +32,7 @@ const Module = struct {
 };
 
 pub const Integer = struct {
-    const Signedness = enum {
+    pub const Signedness = enum {
         Signed,
         Unsigned,
         const position = Resolution.position - SignednessBitSize;
