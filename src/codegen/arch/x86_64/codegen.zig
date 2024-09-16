@@ -684,8 +684,8 @@ pub fn encode(
                     .icmp => processIcmp(prog, function, instruction),
                     .add => processAdd(prog, function, instruction, stackRegister),
                     .memCopy => processMemCopy(prog, function, instruction),
+                    .sub => processSub(prog, function, instruction, stackRegister),
                     // Todo: implement the rest of the instructions
-                    // .sub => processSub(prog, function, instruction),
                     // .mul => processMul(prog, function, instruction),
                     else => panic("Instruction not implemented", .{}),
                 }
@@ -933,4 +933,66 @@ fn processMemCopy(prog: *const IR.Program, data: *Data, func: *Program.Function,
         },
         else => panic("Unexpected sourceId in processMemCopy: {any}", .{sourceId}),
     }
+}
+
+fn processSub(prog: *const IR.Program, func: *Program.Function, ref: IR.Ref, stackReg: Register.ID) void {
+    const subInstruction = prog.instructions.sub[ref.getIDX()];
+    var shouldLoadFirstArg = false;
+    var firstOpKind: OperandKind = undefined;
+    _ = firstOpKind; // this should be used for moving the first operand to a register when processing instruction
+    var secondOpKind: OperandKind = undefined;
+
+    const firstOpAllocation = blk: {
+        switch (subInstruction.left.getId()) {
+            .Instruction => {
+                const instructionId = IrInstruction.getId(subInstruction.left);
+                switch (instructionId) {
+                    .load => break :blk fetchLoad(prog, func, subInstruction.left, ref, true),
+                    else => panic("Unexpected instructionId in processSub: {any}", .{instructionId}),
+                }
+            },
+            else => panic("Unexpected subInstruction.left in processSub: {any}", .{IR.Constant.getId(subInstruction.left)}),
+        }
+    };
+    switch (subInstruction.right.getId()) {
+        .Constant => {
+            switch (IR.Constant.getId(subInstruction.right)) {
+                .Int => {
+                    secondOpKind = .Immediate;
+
+                    const intLit = prog.integerLiterals[subInstruction.right.getIDX()];
+
+                    if (intLit.value == 0) return;
+
+                    const regSize = @as(u8, @intCast(firstOpAllocation.size));
+                    const loadReg = func.regAllocator.allocateDirect(subInstruction.right, regSize);
+                    const movRegInd = moveRegIndirect(
+                        loadReg.register,
+                        @as(u8, @intCast(firstOpAllocation.size)),
+                        firstOpAllocation.register,
+                        firstOpAllocation.offset,
+                    );
+
+                    func.regAllocator.alterAllocDirect(loadReg.register, ref);
+                    func.appendInstruction(movRegInd);
+                    if (firstOpAllocation.register != stackReg) func.regAllocator.free(firstOpAllocation.register);
+
+                    if (intLit.value == 1) func.appendInstruction(decReg(loadReg.register, regSize)) else {
+                        const subRegLiteral = subRegImm(loadReg.register, regSize, intLit);
+                        func.appendInstruction(subRegLiteral);
+                    }
+                },
+                else => panic("Unexpected constant type in processSub: {any}", .{IR.Constant.getId(subInstruction.right)}),
+            }
+        },
+        .Instruction => {
+            switch (IrInstruction.getId(subInstruction.right)) {
+                //Todo: figure it out later
+                .load => unreachable,
+                else => panic("Unexpected branch in processSub: invalid subInstruction.right value", .{}),
+            }
+        },
+        else => panic("Unexpected branch in processSub: invalid subInstruction.right", .{}),
+    }
+    if (shouldLoadFirstArg) unreachable;
 }
