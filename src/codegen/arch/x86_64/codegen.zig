@@ -684,7 +684,7 @@ pub fn encode(
                 switch (instructionId) {
                     .icmp => processIcmp(prog, function, instruction),
                     .add => processAdd(prog, function, instruction, stackRegister),
-                    .memCopy => processMemCopy(prog, function, instruction),
+                    .memCopy => processMemCopy(prog, &data, function, instruction),
                     .sub => processSub(prog, function, instruction, stackRegister),
 
                     .mul => processMul(prog, function, instruction),
