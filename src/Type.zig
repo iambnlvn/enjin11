@@ -106,7 +106,7 @@ pub const Struct = struct {
 
 pub const Pointer = struct {
     type: Type,
-    const size = 8;
+    pub const size = 8;
     pub fn new(idx: u64, moduleIdx: u64) Type {
         return constructTypeValue(Type.ID.Pointer, moduleIdx, idx);
     }

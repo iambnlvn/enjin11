@@ -680,7 +680,7 @@ pub fn encode(
             for (basicBlock.instructions.items) |instruction| {
                 const instructionId = IrInstruction.getId(instruction);
                 const instructionIdx = instruction.getIDX();
-                _ = instructionIdx;
+
                 switch (instructionId) {
                     .icmp => processIcmp(prog, function, instruction),
                     .add => processAdd(prog, function, instruction, stackRegister),
@@ -689,6 +689,134 @@ pub fn encode(
                     .mul => processMul(prog, function, instruction),
                     .br => processBr(prog, function, irFunc, basicBlockIter, instruction),
                     .load => {},
+                    .store => {
+                        const storeInstruction = prog.instructions.store[instructionIdx];
+                        const storePtrId = IrInstruction.getId(storeInstruction.pointer);
+                        const storeValId = storeInstruction.value.getId();
+
+                        switch (storeValId) {
+                            .Constant => {
+                                const constantId = IR.Constant.getId(storeInstruction.value);
+                                switch (constantId) {
+                                    .Int => {
+                                        const intLit = prog.integerLiterals[storeInstruction.value.getIDX()];
+                                        if (storeInstruction.type.getId() != .Integer) panic("Unexpected type {any}", .{storeInstruction.type.getId()});
+
+                                        const bitCount = Type.Integer.getBitCount(storeInstruction.type);
+                                        const byteCunt = bitCount >> 3;
+                                        const stackAllocation = switch (storePtrId) {
+                                            .alloc => function.stackAllocator.getAlloc(function, prog, storeInstruction.pointer),
+                                            .load => fetchLoad(prog, function, storeInstruction.pointer, instruction, false),
+                                            else => panic("Unexpected storePtrId: {any}", .{storePtrId}),
+                                        };
+
+                                        if (!intLit.isSigned) {
+                                            const movStackLit = moveIndirectImmediateUnsigned(
+                                                stackAllocation.register,
+                                                stackAllocation.offset,
+                                                intLit.value,
+                                                byteCunt,
+                                            );
+                                            function.appendInstruction(movStackLit);
+                                        } else unreachable;
+                                    },
+                                    else => panic("Unexpected constantId: {any}", .{constantId}),
+                                }
+                            },
+                            .Instruction => {
+                                const storeInstructionId = IrInstruction.getId(storeInstruction.value);
+
+                                const stackAllocation = switch (storePtrId) {
+                                    .alloc => function.stackAllocator.getAlloc(function, prog, storeInstruction.pointer),
+                                    .load => fetchLoad(prog, function, storeInstruction.pointer, instruction, false),
+                                    .getElPtr => function.stackAllocator.processGEP(function, prog, storeInstruction.pointer),
+                                    else => panic("Unexpected storePtrId: {any}", .{storePtrId}),
+                                };
+
+                                switch (storeInstructionId) {
+                                    .add, .mul, .sub => {
+                                        const regAllocation = function.regAllocator.fetchDirect(
+                                            prog,
+                                            storeInstruction.value,
+                                            instruction,
+                                        ) orelse unreachable;
+
+                                        const movStackReg = moveIndirectReg(
+                                            stackAllocation.register,
+                                            stackAllocation.offset,
+                                            @as(u8, @intCast(stackAllocation.size)),
+                                            regAllocation.register,
+                                            regAllocation.size,
+                                        );
+                                        function.appendInstruction(movStackReg);
+                                    },
+                                    .alloc => {
+                                        const regAllocation = function.regAllocator.fetchDirect(
+                                            function,
+                                            prog,
+                                            storeInstruction.value,
+                                        ) orelse blk: {
+                                            const allocInStack = function.stackAllocator.getAlloc(
+                                                function,
+                                                prog,
+                                                storeInstruction.value,
+                                            );
+                                            const regSize = Type.Pointer.size;
+                                            const reg = function.regAllocator.allocateDirect(storeInstruction.pointer, regSize);
+                                            const leaStack = leaIndirect(
+                                                reg.register,
+                                                regSize,
+                                                allocInStack.register,
+                                                allocInStack.offset,
+                                            );
+                                            function.appendInstruction(leaStack);
+                                            break :blk reg;
+                                        };
+
+                                        const movStackReg = moveIndirectReg(
+                                            stackAllocation.register,
+                                            stackAllocation.offset,
+                                            regAllocation.size,
+                                            regAllocation.register,
+                                            regAllocation.size,
+                                        );
+                                        function.appendInstruction(movStackReg);
+                                        function.regAllocator.free(regAllocation.register);
+                                    },
+                                    .call => {
+                                        const regAllocation = function.regAllocator.fetchDirect(
+                                            prog,
+                                            storeInstruction.value,
+                                            instruction,
+                                        ) orelse unreachable;
+
+                                        const movStackReg = moveIndirectReg(
+                                            stackAllocation.register,
+                                            stackAllocation.offset,
+                                            regAllocation.size,
+                                            regAllocation.register,
+                                            regAllocation.size,
+                                        );
+                                        function.appendInstruction(movStackReg);
+                                        function.regAllocator.free(regAllocation.register);
+                                    },
+                                    else => panic("Unexpected storeInstructionId: {any}", .{storeInstructionId}),
+                                }
+                            },
+                            .Arg => {
+                                const argIdx = storeInstruction.value.getIDX();
+                                const argAlloc = irFunc.argAlloca[argIdx];
+                                const stackAllocation = function.stackAllocator.getAlloc(function, prog, argAlloc);
+                                const argReg = function.regAllocator.fetchArg(argIdx);
+
+                                const movArgStack = moveIndirectReg(stackAllocation.register, stackAllocation.offset, @as(u8, @intCast(stackAllocation.size)), argReg.register, argReg.size);
+
+                                function.appendInstruction(movArgStack);
+                                function.regAllocator.free(argReg.register);
+                            },
+                            else => panic("Unexpected storeValId: {any}", .{storeValId}),
+                        }
+                    },
                     // TODO: implement the rest of the instructions
                     else => panic("Instruction not implemented", .{}),
                 }
