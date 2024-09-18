@@ -817,6 +817,109 @@ pub fn encode(
                             else => panic("Unexpected storeValId: {any}", .{storeValId}),
                         }
                     },
+                    .call => {
+                        const call = prog.instructions.call[instructionIdx];
+                        const callee = call.callee;
+                        const calleeId = callee.getId();
+                        var calleeIdx = callee.getIDX();
+
+                        const callArgCount = call.args.len;
+                        var funcType: Type.Function = undefined;
+
+                        var regAllocSaver = function.regAllocator.spillRegBeforeCall();
+                        const callInstruction = blk: {
+                            switch (calleeId) {
+                                .GlobalFunc => {
+                                    funcType = prog.functions[calleeIdx].declaration.type;
+                                    break :blk callRel32(calleeIdx);
+                                },
+                                .ExternalFunc => {
+                                    const extFunc = prog.external.functions[calleeIdx];
+                                    funcType = extFunc.declaration.type;
+                                    calleeIdx = extFunc.idx.toU32();
+                                    break :blk callRip_Rel32(calleeIdx);
+                                },
+                                else => unreachable,
+                            }
+                        };
+                        for (call.args, 0..) |arg, argIdx| {
+                            const argId = arg.getId();
+                            const argElIdx = arg.getIDX();
+                            const argType = funcType.argTypes[argIdx];
+                            switch (argId) {
+                                .Constant => {
+                                    const constantId = IR.Constant.getId(arg);
+                                    switch (constantId) {
+                                        .Int => {
+                                            if (argType.getId() != .Integer) panic("Expected integer got {any}", .{argType.getId()});
+
+                                            const intLit = prog.integerLiterals[argElIdx];
+                                            const literalVal = intLit.value;
+
+                                            const intBitCount = Type.Integer.getBitCount(argType);
+                                            const intByteCount = @as(u8, @truncate(intBitCount >> 3));
+
+                                            const argReg = function.regAllocator.allocateCallArg(@as(u32, @intCast(argIdx)), arg, intByteCount);
+
+                                            if (literalVal == 0) {
+                                                const xo = xorReg(argReg.register, intByteCount);
+                                                function.appendInstruction(xo);
+                                            } else unreachable;
+                                        },
+                                        else => panic("", .{}),
+                                    }
+                                },
+                                .Instruction => {
+                                    const argInstructionId = IrInstruction.getId(arg);
+                                    switch (argInstructionId) {
+                                        .load => {
+                                            const argLoad = prog.instructions.load[arg.getIDX()];
+                                            const argLoadSize = argLoad.type.getSizeResolved(prog);
+                                            const argDirect = function.regAllocator.allocateCallArg(@as(u32, @intCast(argIdx)), arg, @as(u8, @intCast(argLoadSize)));
+
+                                            function.regAllocator.free(argDirect.register);
+
+                                            const stackInd = function.stackAllocator.getAlloc(function, prog, argLoad.pointer);
+                                            const stack2Reg = moveRegIndirect(argDirect.register, argDirect.size, stackInd.register, stackInd.offset);
+                                            function.appendInstruction(stack2Reg);
+                                        },
+                                        .alloc => {
+                                            const varAddr = function.stackAllocator.getAlloc(function, prog, arg);
+
+                                            const argReg = function.regAllocator.allocateCallArg(@as(u32, @intCast(argIdx)), arg, Type.Pointer.size);
+                                            function.regAllocator.free(argReg.register);
+                                            // it is in the stack, so we move it to a reg
+                                            const argPtr2Reg = leaIndirect(argReg.register, argReg.size, varAddr.register, varAddr.offset);
+                                            function.appendInstruction(argPtr2Reg);
+                                        },
+                                        else => panic("Unexpected arg Instruction Id {any}", .{argInstructionId}),
+                                    }
+                                },
+                                else => panic("Unexpected arg Id {any}", .{argId}),
+                            }
+                        }
+                        function.appendInstruction(callInstruction);
+                        var paramStackSize = @as(i32, @intCast(std.math.max(4, callArgCount) * 8));
+
+                        if (call.type.value != Type.Builtin.voidType.value and call.type.value != Type.Builtin.noreturnType.value) {
+                            const retSize = @as(u8, call.type.getSizeResolved(prog));
+
+                            if (prog.getRefs(.call, instruction.getIDX()).len > 0) {
+                                _ = function.regAllocator.allocateReturn(instruction, retSize);
+                            }
+
+                            if (abi == .msvc and retSize > 8) {
+                                paramStackSize += retSize;
+                                unreachable;
+                            }
+                        }
+
+                        if (abi == .msvc) function.maxCallparamSize = @max(function.maxCallparamSize, paramStackSize);
+                        //Todo: Regs should be restored
+                        if (regAllocSaver.savedRegCount > 0) {
+                            unreachable;
+                        }
+                    },
                     // TODO: implement the rest of the instructions
                     else => panic("Instruction not implemented", .{}),
                 }

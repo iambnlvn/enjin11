@@ -369,9 +369,15 @@ pub const Register = extern union {
             return regInt <= @intFromEnum(Register.ID.D) or (regInt >= @intFromEnum(Register.ID.R8) and regInt <= @intFromEnum(Register.ID.R11));
         }
 
+        pub fn spillRegBeforeCall(_: *Self) Saver {
+            var saver: Saver = undefined;
+            saver.state.occupation.array = std.mem.zeroes([Register.count]occupationType);
+            saver.savedRegisterCount = 0;
+            return saver;
+        }
         pub fn alterAllocDirect(self: *Self, reg: Register.ID, ref: IR.Ref) void {
             const regIdx = @intFromEnum(reg);
-            var destRegOccupation = &self.state.occupation.array[regIdx];
+            const destRegOccupation = &self.state.occupation.array[regIdx];
             if (destRegOccupation.* == .None) panic("Register {s} is not allocated or busy", .{@tagName(reg)});
             var destReg = &self.state.registers.array[regIdx];
             destReg.direct.ref = ref;
