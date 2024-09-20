@@ -3,6 +3,7 @@ const panic = std.debug.panic;
 const _reg = @import("Register.zig");
 const Register = _reg.Register;
 const Indirect = _reg.Indirect;
+const Direct = _reg.Direct;
 const Instruction = @import("genInstruction.zig").GenInstruction;
 const IrInstruction = @import("./../../../Instruction.zig").Instruction;
 const Parser = @import("./../../../Parser.zig");
@@ -826,7 +827,7 @@ pub fn encode(
                         const callArgCount = call.args.len;
                         var funcType: Type.Function = undefined;
 
-                        var regAllocSaver = function.regAllocator.spillRegBeforeCall();
+                        const regAllocSaver = function.regAllocator.spillRegBeforeCall();
                         const callInstruction = blk: {
                             switch (calleeId) {
                                 .GlobalFunc => {
@@ -920,11 +921,77 @@ pub fn encode(
                             unreachable;
                         }
                     },
-                    // TODO: implement the rest of the instructions
+                    .ret => {
+                        const ret = prog.instructions.ret[instructionIdx];
+                        const retType = ret.type;
+                        if (retType.value == Type.Builtin.noreturnType.value) std.debug.panic("wtf noreturn type cannot return", .{});
+
+                        if (retType.value != Type.Builtin.voidType.value) {
+                            const retExpr = ret.value;
+                            const retExprId = retExpr.getId();
+                            const retExprIdx = retExpr.getIDX();
+
+                            switch (retExprIdx) {
+                                .Constant => {
+                                    const constantId = IR.Constant.getId(retExpr);
+                                    switch (constantId) {
+                                        .Int => {
+                                            if (retType.getId() != .Integer) panic("Expected integer got {any}", .{retType.getId()});
+
+                                            const bitCount = Type.Integer.getBitCount(retType);
+                                            const byteCount = @as(u8, @intCast(bitCount >> 3));
+
+                                            const intLit = prog.integerLiterals[retExprIdx];
+
+                                            if (intLit.value != 0) {
+                                                if (!intLit.isSigned) {
+                                                    const reg = function.regAllocator.allocateReturn(retExpr, byteCount);
+                                                    const retMov = movRegisterLiteral(reg.register, intLit.value, byteCount);
+                                                    function.appendInstruction(retMov);
+                                                } else unreachable;
+                                            } else unreachable;
+                                        },
+                                        else => panic("Unexpected constantId {any}", .{constantId}),
+                                    }
+                                },
+                                .Instruction => {
+                                    const retExprInstructionId = IrInstruction.getId(retExpr);
+
+                                    switch (retExprInstructionId) {
+                                        .load => {
+                                            _ = processLoadForRet(prog, function, retExpr);
+                                        },
+                                        .add, .call => {
+                                            const AllocReg = function.regAllocator.fetchDirect(prog, retExpr, instruction) orelse unreachable;
+                                            if (AllocReg.register != .A) panic("Expected register A got {any}", .{AllocReg.register});
+                                        },
+                                        else => panic("Unexpected retExprInstructionId {any}", .{retExprInstructionId}),
+                                    }
+                                },
+                                else => panic("Unexpected retExprId {any}", .{retExprId}),
+                            }
+                        }
+                        function.terminator = .ret;
+                    },
                     else => panic("Instruction not implemented", .{}),
                 }
             }
+            switch (abi) {
+                .msvc => {
+                    const alignment = 0x8;
+                    function.stackAllocator.offset += function.maxCallParamSize;
+                    function.stackAllocator.offset = @intFromBool(function.stackAllocator.offset > 0) * (@as(i32, @intCast(std.mem.alignForward(@as(u32, @intCast(function.stackAllocator.offset)), alignment))) + 0x10);
+                },
+                //Todo: figure out the alignment req of gnu
+                // .gnu => {
+                //     const alignment = 0x10; // Assuming GNU ABI requires 16 byte alignment, not sure!!!!
+                //     function.stackAllocator.offset += function.maxCallParamSize;
+                //     function.stackAllocator.offset = @intFromBool(function.stackAllocator.offset > 0) * (@as(i32, @intCast(std.mem.alignForward(@as(u32, @intCast(function.stackAllocator.offset)), alignment))) + 0x10);
+                // },
+                else => panic("{s} abi not implemented", .{@tagName(abi)}),
+            }
         }
+        // kinda lost at this point to be figured out!
     }
 }
 
@@ -1349,5 +1416,56 @@ fn processBr(
             const unCondJmp = jmpRel32(brExpBasicBlock, .RelLabel);
             func.appendInstruction(unCondJmp);
         } else {}
+    }
+}
+
+fn processLoadForRet(
+    prog: *const IR.Program,
+    func: *Program.Function,
+    ref: IR.Ref,
+) Direct {
+    const loadIdx = ref.getIDX();
+    const load = prog.instructions.load[loadIdx];
+    const loadPtrId = IrInstruction.getId(load.pointer);
+
+    switch (loadPtrId) {
+        .alloc => {
+            const allocation = func.stackAllocator.getAlloc(func, prog, load.pointer);
+            const regSize = @as(u8, @intCast(allocation.size));
+
+            const loadReg = func.regAllocator.allocateReturn(ref, regSize);
+            const movRegStack = moveRegIndirect(loadReg.register, regSize, allocation.register, allocation.offset);
+            func.appendInstruction(movRegStack);
+            return loadReg;
+        },
+        .load => {
+            const resSize = @as(u8, @intCast(load.type.getSizeResolved(prog)));
+            const ld = prog.instructions.load[load.pointer.getIDX()];
+            const allocRef = ld.pointer;
+            const allocation = func.stackAllocator.getAlloc(func, prog, allocRef);
+            const direct = func.regAllocator.allocateDirect(load.pointer, @as(u8, @intCast(allocation.size)));
+            func.regAllocator.free(direct.register);
+
+            const movRegStack = moveRegIndirect(direct.register, direct.size, allocation.register, allocation.offset);
+            func.appendInstruction(movRegStack);
+
+            const indirect = func.regAllocator.allocateIndirect(ref, 0, resSize);
+            func.regAllocator.free(indirect.register);
+
+            const allocRet = func.regAllocator.allocateReturn(ref, resSize);
+
+            const mov2RetReg = moveRegIndirect(allocRet.register, allocRet.size, indirect.register, indirect.offset);
+            func.appendInstruction(mov2RetReg);
+
+            return allocRet;
+        },
+        .getElPtr => {
+            const gepInd = func.stackAllocator.processGEP(func, prog, load.pointer);
+            const allocRet = func.regAllocator.allocateReturn(ref, @as(u8, @intCast(gepInd.size)));
+            const mov2RetReg = moveRegIndirect(allocRet.register, allocRet.size, gepInd.register, gepInd.offset);
+            func.appendInstruction(mov2RetReg);
+            return allocRet;
+        },
+        else => panic("{any}", .{loadPtrId}),
     }
 }
