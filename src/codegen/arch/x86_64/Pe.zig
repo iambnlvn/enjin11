@@ -1,8 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Arraylist = std.ArrayList;
+const panic = std.debug.panic;
 const Semantics = @import("./../../../Sem.zig");
 const Program = @import("Program.zig").Program;
+const Parser = @import("./../../../Parser.zig");
+const writeExeFile = @import("./../../gen.zig").writeExeFile;
 
 const DirectoryIdx = enum {
     @"export",
@@ -24,6 +27,7 @@ const DirectoryIdx = enum {
 
 const imageSize = 8;
 pub const fileAlignment = 0x200;
+pub const sectionAlignment = 0x1000;
 
 pub const ImageSectionHeader = extern struct {
     name: [imageSize]u8,
@@ -61,6 +65,91 @@ const ImageImportDescriptor = extern struct {
     forwarderChain: u32,
     name: u32,
     firstThunk: u32,
+};
+
+const ImageDosHeader = extern struct {
+    magNum: u16,
+    bytesOnLastPage: u16,
+    pagesInFile: u16,
+    relocations: u16,
+    headerSize: u16,
+    minExtraParag: u16,
+    maxExtraParag: u16,
+    initialSS: u16,
+    initialSP: u16,
+    checksum: u16,
+    initialIP: u16,
+    initialCS: u16,
+    relocTableOffset: u16,
+    overlayNumber: u16,
+    reserved: [4]u16,
+    OEMID: u16,
+    OEMInfo: u16,
+    reserved2: [10]u16,
+    newHeaderOffset: u32,
+};
+
+const ImageFileHeader = extern struct {
+    machine: u16,
+    sectionCount: u16,
+    timeDateStamp: u32,
+    ptrToSymbolTable: u32,
+    symbolCount: u32,
+    optionalHeaderSize: u16,
+    caracs: u16,
+
+    const caracs = enum(u16) {
+        relocationsStripped = 0x0001,
+        executable = 0x0002,
+        lineNumsStripped = 0x0004,
+        localSymsStripped = 0x0008,
+        aggresiveWsTrim = 0x0010,
+        largeAddressAware = 0x0020,
+        bytesReservedLow = 0x0080,
+        _32bitMachine = 0x0100,
+        debugStripped = 0x0200,
+        runFromSwap = 0x0400,
+        netRunFromSwap = 0x0800,
+        system = 0x1000,
+        dll = 0x2000,
+        upSystemOnly = 0x4000,
+        bytesReservedHigh = 0x8000,
+    };
+};
+const imageNumOfDir = 0x10;
+const ImageOptionalHeader = extern struct {
+    mag: u16,
+    majorLinkerVersion: u8,
+    minorLinkerVersion: u8,
+    codeSize: u32,
+    initializedDataSize: u32,
+    uninitializedDataSize: u32,
+    entryPointRVA: u32,
+    baseOfCode: u32,
+    imageBase: u64,
+    sectionAlignment: u32,
+    fileAlignment: u32,
+    majorOSVersion: u16,
+    minorOSVersion: u16,
+    majorImageVersion: u16,
+    minorImageVersion: u16,
+    majorSubsystemVersion: u16,
+    minorSubsystemVersion: u16,
+    win32VersionValue: u32,
+    sizeOfImage: u32,
+    sizeOfHeaders: u32,
+    checkSum: u32,
+    subsystem: u16,
+    DLLCaracs: u16,
+    sizeOfStackReserve: u64,
+    sizeOfStackCommit: u64,
+    sizeOfHeapReserve: u64,
+    sizeOfHeapCommit: u64,
+    loaderFlags: u32,
+    numberOfRVAandSizes: u32,
+    dataDirectory: [imageNumOfDir]Section.Directory,
+
+    const magic = 0x20B;
 };
 
 pub const Section = struct {
@@ -230,6 +319,30 @@ pub const Section = struct {
         }
         return text;
     }
+
+    fn encodeDataSection(allocator: *Allocator, dataBuffer: []const u8, offset: *Offset) Section {
+        const dataBufferLen = if (dataBuffer.len == 0) 1 else dataBuffer.len;
+        var data = Section{
+            .header = std.mem.zeroInit(ImageSectionHeader, ImageSectionHeader{
+                .ptrToRawData = offset.file,
+                .virtualAddress = offset.virtual,
+                .name = Section.names[@intFromEnum(Section.Index.@".data")],
+                .caracs = Section.caracteristics[@intFromEnum(Section.Index.@".data")],
+            }),
+            .buffer = Arraylist(u8).initCapacity(allocator, dataBufferLen) catch unreachable,
+        };
+
+        if (dataBuffer.len == 0)
+            data.buffer.appendAssumeCapacity(0)
+        else
+            data.buffer.appendSliceAssumeCapacity(dataBuffer);
+
+        data.header.misc.virtualSize = @as(u32, @intCast(dataBufferLen));
+        data.header.rowDataSize = @as(u32, @intCast(std.mem.alignForward(dataBufferLen, fileAlignment)));
+        offset.afterSize(data.header.rowDataSize);
+
+        return data;
+    }
 };
 
 const LibOffsets = struct {
@@ -261,4 +374,141 @@ pub const Patch = struct {
     destinationSectionBuffer: u32,
     section2ReadFrom: Section.Index,
     section2WriteTo: Section.Index,
+};
+
+const imageNTSignature: u32 = 0x00004550;
+const imageDosSignature: u16 = 0x5A4D;
+
+pub fn write(allocator: *Allocator, exec: anytype, dataBuffer: []const u8, execFileName: []const u8, external: Semantics.External, target: std.Target) void {
+    const nullSectionHeaderCount = 1;
+    var sectionHeaderSize = @sizeOf(ImageSectionHeader) * (Section.count + nullSectionHeaderCount);
+
+    const fileSizeOfHeaders = @as(u32, @intCast(std.mem.alignForward(@sizeOf(ImageDosHeader) + @sizeOf(@TypeOf(imageNTSignature)) + @sizeOf(ImageFileHeader) + @sizeOf(ImageOptionalHeader) + sectionHeaderSize, fileAlignment)));
+
+    var offset = Offset{ .file = @as(u32, std.mem.alignForward(fileSizeOfHeaders, fileAlignment)), .virtual = @as(u32, @intCast(std.mem.alignForward(fileSizeOfHeaders, sectionAlignment))) };
+    var outText: Section.Text.EncodingOutput = undefined;
+    var rDataOut: Section.Rdata.EncodingOutput = undefined;
+
+    var sections = [Section.count]Section{
+        Section.encodeTextSection(exec, allocator, &outText, target.cpu.arch, &offset),
+        Section.encodeRdataSection(allocator, external, &rDataOut, &offset),
+        Section.encodeDataSection(allocator, dataBuffer, &offset),
+    };
+
+    for (outText.patches) |patch| {
+        const section2Patch = &sections[@intFromEnum(patch.section2WriteTo)];
+
+        const jmpFromRVA = section2Patch.header.virtualAddress + patch.sourceSectionBuffer + 4;
+        var patchAddr = @as(*align(1) i32, @ptrCast(&section2Patch.buffer.items[patch.destinationSectionBuffer]));
+
+        const jmp2RVA = switch (patch.section2ReadFrom) {
+            .@".rdata" => blk: {
+                const idx = Parser.Function.External.Index.fromU32(patch.sourceSectionBuffer);
+                const symOffset = rDataOut.libOffsets.items[idx.library].symOffsets[idx.function];
+                break :blk sections[@intFromEnum(Section.Index.@".rdata")].header.virtualAddress + symOffset;
+            },
+            .@".data" => blk: {
+                const symOffset = patch.sourceSectionBuffer;
+                break :blk sections[@intFromEnum(Section.Index.@".data")].header.virtualAddress + symOffset;
+            },
+            else => panic("Invalid section to patch"),
+        };
+        patchAddr.* = @as(i32, @intCast(@as(i64, @intCast(jmp2RVA)) - @as(i64, @intCast(jmpFromRVA))));
+    }
+
+    const virtualSize = offset.virtual;
+    const maxExecBufferSize = offset.file;
+
+    var exeBuffer = Arraylist(u8).initCapacity(allocator, maxExecBufferSize) catch unreachable;
+
+    exeBuffer.appendSlice(std.mem.asBytes(&std.mem.zeroInit(ImageDosHeader, .{
+        .magNum = imageDosSignature,
+        .newHeaderOffset = @sizeOf(ImageDosHeader),
+    }))) catch unreachable;
+
+    exeBuffer.appendSlice(std.mem.asBytes(&imageNTSignature)) catch unreachable;
+    exeBuffer.appendSlice(std.mem.asBytes(std.mem.zeroInit(ImageFileHeader, ImageFileHeader{
+        .machine = @intFromEnum(switch (target.cpu.arch) {
+            .x86_64 => ImageFileMachine.amd64,
+            .aarch64 => ImageFileMachine.arm64,
+            else => panic("Unsupported Cpu Architecture\n", .{target.cpu.arch}),
+        }),
+        .sectionCount = Section.count,
+        .timeDateStamp = @as(u32, @intCast(@as(i32, @intCast(std.time.timestamp())))),
+        .optionalHeaderSize = @sizeOf(ImageOptionalHeader),
+        .caracs = @intFromEnum(ImageFileHeader.caracs.executable) | @intFromEnum(ImageFileHeader.caracs.largeAddressAware),
+    }))) catch unreachable;
+
+    const imageOptionalHeaderIdx = exeBuffer.items.len;
+    exeBuffer.appendSlice(std.mem.asBytes(&std.mem.zeroInit(ImageOptionalHeader, ImageOptionalHeader{
+        .mag = ImageOptionalHeader.magic,
+        .majorLinkerVersion = 1,
+        .minorLinkerVersion = 0,
+        .codeSize = sections[@intFromEnum(Section.Index.@".text")].header.rowDataSize,
+        .initializedDataSize = sections[@intFromEnum(Section.Index.@".rdata")].header.rowDataSize + sections[@intFromEnum(Section.Index.@".data")].header.rowDataSize,
+        .entryPointRVA = sections[@intFromEnum(Section.Index.@".rdata")].header.rowDataSize + sections[@intFromEnum(Section.Index.@".data")].header.rowDataSize,
+        .baseOfCode = sections[@intFromEnum(Section.Index.@".text")].header.virtualAddress,
+        .imageBase = 0x0000000140000000,
+        .sectionAlignment = sectionAlignment,
+        .fileAlignment = fileAlignment,
+        .majorOSVersion = 6,
+        .minorOSVersion = 0,
+        .majorImageVersion = 0,
+        .majorSubsystemVersion = 6,
+        .minorSubsystemVersion = 0,
+        .subsystem = 3,
+        .sizeOfHeaders = fileSizeOfHeaders,
+        .sizeOfImage = virtualSize,
+        .checkSum = 0,
+        .DLLCaracs = @intFromEnum(ImageDLLCharacteristics.highEntropyVA) | @intFromEnum(ImageDLLCharacteristics.nx_compat) | @intFromEnum(ImageDLLCharacteristics.dynamicBase) | @intFromEnum(ImageDLLCharacteristics.terminalServerAware),
+        .sizeOfStackReserve = 0x100000,
+        .sizeOfStackCommit = 0x1000,
+        .sizeOfHeapReserve = 0x100000,
+        .sizeOfHeapCommit = 0x1000,
+        .numberOfRVAandSizes = imageNumOfDir,
+    }))) catch panic("Failed to append Optional headers\n", .{});
+
+    var imageOptionalHeader = @as(*align(1) ImageOptionalHeader, @ptrFromInt(@intFromPtr(exeBuffer.items.ptr) + imageOptionalHeaderIdx));
+
+    if (rDataOut.iat.size > 0) {
+        var importDataDir = &imageOptionalHeader.dataDirectory[@intFromEnum(DirectoryIdx.import)];
+        importDataDir.* = rDataOut.import;
+    }
+
+    for (sections) |*section| {
+        exeBuffer.appendSlice(std.mem.asBytes(&section.header)) catch unreachable;
+    }
+
+    exeBuffer.appendSlice(std.mem.asBytes(&std.mem.zeroes(ImageSectionHeader))) catch unreachable;
+
+    for (sections) |*section| {
+        exeBuffer.items.len = section.header.ptrToRawData;
+        exeBuffer.appendSlice(section.buffer.items) catch unreachable;
+    }
+
+    exeBuffer.items.len = offset.file;
+    writeExeFile(execFileName, exeBuffer.items);
+}
+
+const ImageFileMachine = enum(u16) {
+    unknown = 0,
+    tarHost = 0x0001,
+    amd64 = 0x8664,
+    arm64 = 0xAA64,
+
+    const axp64 = ImageFileMachine.alpha64;
+};
+
+const ImageDLLCharacteristics = enum(u16) {
+    highEntropyVA = 0x0020,
+    dynamicBase = 0x0040,
+    forceIntegrity = 0x0080,
+    nxCompat = 0x0100,
+    noIsolation = 0x0200,
+    noSeh = 0x0400,
+    noBind = 0x0800,
+    appContainer = 0x1000,
+    wdmDriver = 0x2000,
+    guardCf = 0x4000,
+    terminalServerAware = 0x8000,
 };
