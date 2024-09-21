@@ -13,7 +13,7 @@ const Program = _prog.Program;
 const BackWardPatch = _prog.BackwardPatch;
 const Stack = @import("Stack.zig").Stack;
 const Type = @import("./../../../Type.zig");
-
+const Pe = @import("./Pe.zig");
 const sysVArgRegisters = [_]Register.ID{
     .DI,
     .SI,
@@ -570,7 +570,7 @@ const Data = struct {
 pub fn encode(
     allocator: *std.mem.Allocator,
     prog: *const IR.Program,
-    execFIleName: []const u8,
+    execFileName: []const u8,
     target: std.Target,
 ) void {
     var abi = target.abi;
@@ -581,7 +581,7 @@ pub fn encode(
     //     .msvc => .{ msvcArgRegisters[0..], Register.ID.SP },
     //     .gnu => .{ sysVArgRegisters[0..], Register.ID.BP },
     // };
-    _ = execFIleName;
+
     const argRegisters = switch (abi) {
         .gnu => sysVArgRegisters[0..],
         .msvc => msvcArgRegisters[0..],
@@ -991,7 +991,16 @@ pub fn encode(
                 else => panic("{s} abi not implemented", .{@tagName(abi)}),
             }
         }
-        // kinda lost at this point to be figured out!
+        var executable = Program{
+            .fns = functions.items,
+            .dataBuffer = data.buffer,
+        };
+
+        switch (os) {
+            .windows => Pe.write(allocator, &executable, data.buffer.items, execFileName, prog.external, target),
+            //Todo: Implement linux
+            else => panic("{s} os not implemented", .{@tagName(os)}),
+        }
     }
 }
 
