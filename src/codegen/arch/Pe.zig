@@ -2,10 +2,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Arraylist = std.ArrayList;
 const panic = std.debug.panic;
-const Semantics = @import("./../../../Sem.zig");
-const Program = @import("Program.zig").Program;
-const Parser = @import("./../../../Parser.zig");
-const writeExeFile = @import("./../../gen.zig").writeExeFile;
+const Semantics = @import("./../arch/../../Sem.zig");
+const Program = @import("./x86_64/Program.zig").Program;
+const Parser = @import("./../../Parser.zig");
+const writeExeFile = @import("./../arch/../gen.zig").writeExeFile;
 
 const DirectoryIdx = enum {
     @"export",
